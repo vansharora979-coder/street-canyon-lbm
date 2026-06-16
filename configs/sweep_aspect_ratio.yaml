@@ -1,0 +1,22 @@
+# Production aspect-ratio sweep (Phase 6).
+#
+# Perpendicular wind, production resolution from Phase 4. Spans the three Oke
+# (1988) flow regimes so the skimming-flow transition (~H/W = 0.7) is captured:
+#   H/W < ~0.3   isolated roughness flow
+#   ~0.3-0.7     wake interference flow
+#   H/W > ~0.7   skimming flow (trapped vortex; ventilation collapses)
+
+type: canyon_sweep
+seed: 12345
+
+inherits: base.yaml
+
+sweep:
+  variable: aspect_ratio
+  values: [0.5, 0.66, 1.0, 1.5, 2.0, 2.5, 3.0]
+  fixed:
+    wind_direction_deg: 90    # perpendicular only; oblique wind is 3D future work
+
+output:
+  csv: results/sweep_aspect_ratio.csv     # one row per H/W with metrics + metadata ref
+  metrics: [retention, ach, exchange_velocity]

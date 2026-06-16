@@ -1,0 +1,37 @@
+# CODASC wind-tunnel validation case (Phase 5 HARD gate).
+#
+# Target: the empty (no-trees) isolated street canyon, perpendicular wind,
+# street-level line source -- the reference case of the Gromke & Ruck wind-
+# tunnel campaign distributed via the CODASC database (KIT Karlsruhe,
+# https://www.codasc.de). See data/validation/README.md for how to obtain the
+# reference data file and the exact c+ normalization.
+
+type: canyon
+seed: 12345
+
+inherits: base.yaml           # override only what differs from base
+
+geometry:
+  aspect_ratio: 1.0           # CODASC reference canyon: H = W (street width = building height)
+  # Wind-tunnel model scale (documented for the c+ normalization; physics set by Re):
+  H_model_m: 0.12             # building height in the wind tunnel [m]
+  W_model_m: 0.12             # street width [m]  (=> H/W = 1)
+  L_canyon_model_m: 1.20      # canyon length [m] (3D tunnel; 2D model = centre plane y/L = 0)
+
+flow:
+  wind_direction_deg: 90      # perpendicular to the canyon axis (the 2D-valid case)
+  # Wind-tunnel reference: U_H ~ 4.65 m/s, nu_air ~ 1.5e-5 -> Re_H ~ 3.7e4.
+  Re: 3.7e4                   # (provisional) match the wind-tunnel building-height Re order
+
+scalar:
+  source: line_street_level   # the tunnel uses ground-level line source(s) along the street
+  # CODASC normalized concentration (confirm exact form against codasc.de docs):
+  #   c+ = c * U_H * H * L_src / Q
+  normalization: codasc_cplus
+
+validation:
+  compare: wall_profiles_centreplane   # vertical c+ profiles on leeward & windward walls
+  reference_file: data/validation/codasc_AR1_notrees_90deg.csv  # see README to obtain
+  metrics: [fac2, nmse, hit_rate]
+  acceptance:
+    fac2_min: 0.66

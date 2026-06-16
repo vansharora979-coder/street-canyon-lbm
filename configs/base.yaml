@@ -1,0 +1,60 @@
+# Default physical + numerical parameters for the 2D LBM street-canyon study.
+#
+# NOTE ON STATUS: values marked (provisional) document intent and are LOCKED by
+# the rigor gates -- production resolution by the Phase 4 grid-independence
+# study, and the collision/turbulence treatment + simulated Reynolds number by
+# the Phase 5 CODASC validation. Do not treat them as final until those pass.
+
+type: canyon                  # 'canyon' (Phases 2+) or 'poiseuille' (Phase 1 check)
+seed: 12345                   # fixed for reproducibility
+
+geometry:
+  aspect_ratio: 1.0           # H/W, the controlling shape parameter
+  # Domain margins follow COST 732 / AIJ best practice (units of building height H):
+  fetch_upstream_H: 5.0       # inlet -> windward building
+  top_margin_H: 6.0           # rooftop -> domain top (>= 5-6 H)
+  outflow_H: 15.0             # leeward building -> outlet (>= 15 H)
+
+resolution:
+  cells_per_H: 40             # (provisional) lattice cells per building height; Phase 4 confirms (20/40/80)
+
+flow:
+  # The mean canyon vortex / three-regime structure is approximately Reynolds-
+  # independent above Re ~ 1e4, which is why wind tunnels at this order validate
+  # full-scale flows. We therefore target a *simulated* building-height Re of
+  # this order rather than the real-street value (~1e6-1e7), which a 2D laptop
+  # LBM cannot resolve, and we do NOT claim to.
+  Re: 1.0e4                   # (provisional) simulated building-height Reynolds number
+  u_lbm: 0.05                 # lattice velocity for U_H (keep <= 0.1; ~0.087 Mach)
+  collision: mrt              # stability ladder: bgk -> trt/mrt -> + Smagorinsky LES
+  les:
+    enabled: true
+    model: smagorinsky
+    Cs: 0.16                  # Smagorinsky constant
+  inlet_profile: log          # log-law (or power-law) approach-flow profile
+  z0_over_H: 0.01             # aerodynamic roughness length / H for the log profile
+
+# Reference scales used ONLY to report physical dx, dt and for diagnostics;
+# the physics is governed by Re, geometry, and the Schmidt number above/below.
+reference:
+  H_m: 20.0                   # building height [m] (full scale)
+  U_H_mps: 5.0                # reference velocity at building height [m/s]
+  nu_air_m2s: 1.5e-5          # kinematic viscosity of air [m^2/s]
+
+scalar:                       # passive pollutant (Phase 3)
+  schmidt: 0.72               # Sc = nu / D (turbulent Sc ~ 0.7 typical)
+  source: line_street_level   # continuous line source at street level
+  source_strength: 1.0        # arbitrary units; results are normalized (CODASC c+)
+
+run:
+  max_iter: 400000            # cap so the full sweep finishes overnight on a laptop
+  steady_tol: 1.0e-7          # relative L2 change in fields for steady-state stop
+  check_every: 500
+
+# --- Phase 1 self-contained solver check (separate from the canyon mapping) ---
+poiseuille:
+  ny: 42
+  nx: 8
+  tau: 0.8
+  u_max: 0.05
+  max_iter: 200000

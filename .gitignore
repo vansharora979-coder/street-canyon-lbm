@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environment
+.venv/
+venv/
+
+# Generated results: per-run JSON/CSV + their .meta.json sidecars are
+# regenerable and stay out of git. Only committed summaries are tracked.
+results/*
+!results/.gitkeep
+!results/*.summary.csv
+
+# Generated figures are regenerable via `make figures`; ignore by default.
+figures/*
+!figures/.gitkeep
+
+# OS / editor cruft
+.DS_Store
+._*
+*.swp
+
+# Claude Code local tooling/session state
+.claude/
