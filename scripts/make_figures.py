@@ -33,8 +33,23 @@ def fig_poiseuille_validation() -> None:
     )
 
 
+def fig_canyon_flow() -> None:
+    """Plot the H/W=1 canyon flow field from the saved run_case output."""
+    npz = ROOT / "results" / "canyon_AR1.npz"
+    if not npz.exists():
+        print(
+            "  canyon_flow_HW1  SKIPPED (no results/canyon_AR1.npz). "
+            "Run: python scripts/run_case.py --config configs/canyon_demo.yaml"
+        )
+        return
+    paths = viz.plot_canyon_flow(npz, FIGDIR / "canyon_flow_HW1",
+                                 title="Street-canyon flow field, H/W = 1")
+    print(f"  canyon_flow_HW1 -> {', '.join(p.name for p in paths)}")
+
+
 FIGURES = {
     "poiseuille_validation": fig_poiseuille_validation,
+    "canyon_flow_HW1": fig_canyon_flow,
 }
 
 

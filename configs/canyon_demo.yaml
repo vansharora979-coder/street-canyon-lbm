@@ -1,0 +1,35 @@
+# Phase 2 demonstration case: single canyon vortex at H/W = 1.
+#
+# Moderate Reynolds number where the from-scratch BGK solver is comfortably
+# stable (tau ~ 0.54), on a reduced domain for fast turnaround. The production
+# configuration (full COST 732 margins, high Re via MRT + Smagorinsky LES, fine
+# grid) lives in base.yaml and is locked by the Phase 4/5 gates.
+
+type: canyon
+seed: 12345
+
+resolution:
+  cells_per_H: 32
+
+geometry:
+  aspect_ratio: 1.0
+  building_width_H: 1.0
+  fetch_upstream_H: 4.0      # reduced from the COST 732 production margins
+  top_margin_H: 4.0
+  outflow_H: 8.0             # long enough to hold the outlet sponge + a buffer
+
+flow:
+  Re: 100.0                  # mildly unsteady (gentle shedding); mean is reported
+  u_lbm: 0.04                # low Mach: peak speed over the roof stays < 0.1
+  collision: bgk
+  inlet_profile: log
+  z0_over_H: 0.01
+  sponge_H: 4.0              # outlet viscosity sponge length (absorbs wake + acoustics)
+  tau_sponge: 1.0
+
+run:
+  max_iter: 100000
+  steady_tol: 1.0e-5
+  check_every: 2000
+  ramp_iters: 8000
+  average_from: 40000        # time-average the (statistically stationary) flow over the last 60k steps

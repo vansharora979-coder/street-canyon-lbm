@@ -135,12 +135,20 @@ def guo_forcing(
 
 
 def collide_bgk(
-    f: np.ndarray, feq: np.ndarray, tau: float, Fi: np.ndarray | None = None
+    f: np.ndarray,
+    feq: np.ndarray,
+    tau: float | np.ndarray,
+    Fi: np.ndarray | None = None,
 ) -> np.ndarray:
     """Single-relaxation-time (BGK) collision, optionally with a forcing term.
 
     f_i^post = f_i - (f_i - f_i^eq)/tau [+ F_i]
+
+    ``tau`` may be a scalar or a per-cell field of shape ``(Ny, Nx)`` (e.g. an
+    outlet viscosity sponge); it is broadcast over the 9 directions.
     """
+    if np.ndim(tau) == 2:
+        tau = tau[None, :, :]
     fpost = f - (f - feq) / tau
     if Fi is not None:
         fpost = fpost + Fi

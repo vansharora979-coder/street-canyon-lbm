@@ -25,6 +25,11 @@ configs (base, validation_codasc, sweep_aspect_ratio); tests; paper (IMRaD); res
 - Walls are halfway bounce-back via a boolean `solid` mask (`boundary.precompute_bounceback`).
 - Lattice↔physical mapping lives in `solver.LatticeUnits` (choose n_cells, u_lbm, Re → τ, ν).
 - Every result goes through `io.save_result`, which writes a `*.meta.json` sidecar (git SHA, versions, config).
+- Canyon BCs (`CanyonSimulation`): non-eq-extrapolation velocity inlet + constant-pressure outlet,
+  free-slip top, bounce-back walls, plus an outlet viscosity sponge (`tau` field) to kill BC acoustic
+  reflections. The canyon flow is unsteady → `run()` reports a time-averaged mean (set `average_from`).
+- HPC, not a laptop (Ryzen 7950X 16C/32T, 60 GB, RTX 4090): target full Re via MRT+LES, parallelize the
+  sweep, GPU/CuPy in reserve — the laptop "Plan B" is not the default.
 
 ## Working method
 - After each phase: print a status report vs the acceptance criteria, then PAUSE for the user.
@@ -32,4 +37,4 @@ configs (base, validation_codasc, sweep_aspect_ratio); tests; paper (IMRaD); res
 - Record design choices in DECISIONS.md; running progress in PROGRESS.md.
 
 ## Status
-See PROGRESS.md and DECISIONS.md. (Phases 0–1 complete; awaiting go-ahead for Phase 2.)
+See PROGRESS.md and DECISIONS.md. (Phases 0–2 complete; awaiting go-ahead for Phase 3.)

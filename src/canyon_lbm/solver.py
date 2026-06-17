@@ -16,7 +16,16 @@ from dataclasses import dataclass
 import numpy as np
 
 from . import lattice as lb
-from .boundary import apply_bounceback, precompute_bounceback
+from .boundary import (
+    apply_bounceback,
+    freeslip_top,
+    inlet_velocity_neq,
+    log_law_profile,
+    outlet_pressure_neq,
+    power_law_profile,
+    precompute_bounceback,
+)
+from .geometry import CanyonGeometry, build_canyon
 
 
 @dataclass(frozen=True)
@@ -191,3 +200,251 @@ def run_poiseuille(
         "mass0": mass0,
         "mass1": mass1,
     }
+
+
+class CanyonSimulation:
+    """D2Q9 flow solver for the street canyon (Phase 2).
+
+    Wires the lattice primitives to the canyon geometry and boundary conditions:
+    bounce-back walls (ground + buildings), a Zou/He velocity inlet with a
+    log-law (or power-law) approach profile, a zero-gradient outflow, and a
+    free-slip top. BGK collision; the MRT/Smagorinsky escalation (for higher Re)
+    plugs into :meth:`_collide`.
+    """
+
+    def __init__(
+        self,
+        geom: CanyonGeometry,
+        tau: float,
+        u_lbm: float,
+        inlet_ux: np.ndarray,
+        collision: str = "bgk",
+        sponge_cells: int = 0,
+        tau_sponge: float = 1.0,
+    ):
+        self.geom = geom
+        self.tau = float(tau)
+        self.u_lbm = float(u_lbm)
+        self.inlet_ux = np.asarray(inlet_ux, dtype=np.float64)
+        self.inlet_uy = np.zeros_like(self.inlet_ux)
+        self.collision = collision
+        self.solid = geom.solid
+        self.fluid = ~geom.solid
+        self.bb_masks = precompute_bounceback(geom.solid)
+
+        # Outlet viscosity sponge: tau ramps smoothly from the bulk value up to
+        # tau_sponge over the last `sponge_cells` columns, absorbing the wake and
+        # outgoing acoustic waves so they do not reflect off the outlet and
+        # sustain a domain-spanning standing wave. Quadratic ramp -> no abrupt
+        # impedance jump at the sponge entrance.
+        self.sponge_cells = int(sponge_cells)
+        self.tau_field = np.full((geom.ny, geom.nx), self.tau, dtype=np.float64)
+        if self.sponge_cells > 0:
+            x = np.arange(geom.nx)
+            start = geom.nx - self.sponge_cells
+            s = np.clip((x - start) / self.sponge_cells, 0.0, 1.0)
+            self.tau_field[:, :] = self.tau + (tau_sponge - self.tau) * s[None, :] ** 2
+
+        # Initialise from rest (rho = 1, u = 0). The inlet is ramped up smoothly
+        # in run(), avoiding the startup shock an impulsive profile would slam
+        # into the building faces (a classic low-tau BGK blow-up).
+        rho = np.ones((geom.ny, geom.nx), dtype=np.float64)
+        uz = np.zeros((geom.ny, geom.nx), dtype=np.float64)
+        self.f = lb.equilibrium(rho, uz, uz)
+
+    @classmethod
+    def from_config(cls, config: dict) -> "CanyonSimulation":
+        """Build a fully config-driven canyon simulation from a parsed YAML dict."""
+        n = int(config["resolution"]["cells_per_H"])
+        g = config.get("geometry", {})
+        geom = build_canyon(
+            cells_per_H=n,
+            aspect_ratio=float(g.get("aspect_ratio", 1.0)),
+            building_width_H=float(g.get("building_width_H", 1.0)),
+            fetch_upstream_H=float(g.get("fetch_upstream_H", 5.0)),
+            top_margin_H=float(g.get("top_margin_H", 6.0)),
+            outflow_H=float(g.get("outflow_H", 15.0)),
+        )
+        flow = config.get("flow", {})
+        u_lbm = float(flow.get("u_lbm", 0.05))
+        Re = float(flow.get("Re", 1.0e3))
+        nu = u_lbm * n / Re
+        tau = lb.tau_from_viscosity(nu)
+        if flow.get("inlet_profile", "log") == "power":
+            inlet = power_law_profile(geom.ny, geom.h, u_lbm,
+                                      alpha=float(flow.get("alpha", 0.25)))
+        else:
+            z0 = float(flow.get("z0_over_H", 0.01)) * n
+            inlet = log_law_profile(geom.ny, geom.h, u_lbm, z0_cells=z0)
+        sponge_cells = int(round(float(flow.get("sponge_H", 0.0)) * n))
+        return cls(geom, tau, u_lbm, inlet, collision=flow.get("collision", "bgk"),
+                   sponge_cells=sponge_cells,
+                   tau_sponge=float(flow.get("tau_sponge", 1.0)))
+
+    def _collide(self, f, feq):
+        if self.collision == "bgk":
+            return lb.collide_bgk(f, feq, self.tau_field)
+        raise NotImplementedError(
+            f"collision='{self.collision}' is not available yet "
+            "(MRT/Smagorinsky land in the high-Re escalation phase)."
+        )
+
+    def step(self, inlet_scale: float = 1.0) -> None:
+        f = self.f
+        rho, ux, uy = lb.macroscopic(f)
+        feq = lb.equilibrium(rho, ux, uy)
+        fpost = self._collide(f, feq)
+        fnew = lb.stream(fpost)
+        apply_bounceback(fnew, fpost, self.bb_masks)       # ground + buildings
+        inlet_velocity_neq(                                # inlet (west)
+            fnew, self.inlet_ux * inlet_scale, self.inlet_uy
+        )
+        outlet_pressure_neq(fnew, rho_b=1.0)               # constant-pressure outlet
+        freeslip_top(fnew, fpost)                          # free-slip top
+        self.f = fnew
+
+    def macroscopic(self):
+        return lb.macroscopic(self.f)
+
+    def run(
+        self,
+        max_iter: int = 200_000,
+        tol: float = 1e-7,
+        check_every: int = 500,
+        ramp_iters: int = 10_000,
+        average_from: int | None = None,
+        verbose: bool = False,
+    ) -> dict:
+        """Iterate the canyon flow; return fields + single-vortex diagnostics.
+
+        The inlet velocity is linearly ramped from 0 to full over the first
+        ``ramp_iters`` steps. Two termination modes:
+
+        * ``average_from`` is None: iterate to a steady state (relative L2 change
+          of the speed field below ``tol``) and report the final snapshot.
+        * ``average_from`` set: the canyon flow is unsteady (vortex shedding), so
+          run to ``max_iter`` and report the **time-averaged** mean field
+          accumulated over ``[average_from, max_iter]`` -- the rigorous choice
+          for a statistically-stationary flow. ``tol`` early-stop is disabled.
+
+        Aborts on NaN / velocity blow-up.
+        """
+        prev = None
+        converged = False
+        iters = max_iter
+        history = []
+        averaging = average_from is not None
+        sums = None
+        n_avg = 0
+        for it in range(1, max_iter + 1):
+            scale = min(1.0, it / ramp_iters) if ramp_iters > 0 else 1.0
+            self.step(inlet_scale=scale)
+
+            if averaging and it >= average_from:
+                rho, ux, uy = self.macroscopic()
+                if sums is None:
+                    sums = [np.zeros_like(rho) for _ in range(3)]
+                sums[0] += rho; sums[1] += ux; sums[2] += uy
+                n_avg += 1
+
+            if it % check_every == 0:
+                _, ux, uy = self.macroscopic()
+                speed = np.sqrt(ux * ux + uy * uy)
+                smax = float(np.nanmax(speed))
+                if not np.isfinite(smax) or smax > 0.4:
+                    raise FloatingPointError(
+                        f"Unstable at iter {it}: max speed = {smax:.3g} "
+                        f"(tau={self.tau:.4f}). Lower Re / raise resolution / use MRT."
+                    )
+                cur = speed[self.fluid]
+                if prev is not None and it > ramp_iters:
+                    change = float(
+                        np.linalg.norm(cur - prev) / (np.linalg.norm(cur) + 1e-30)
+                    )
+                    history.append((it, change))
+                    if verbose:
+                        tag = " [avg]" if (averaging and it >= average_from) else ""
+                        print(f"  it={it:7d}  d(speed)={change:.3e}  umax={smax:.4f}{tag}",
+                              flush=True)
+                    if not averaging and change < tol:
+                        converged = True
+                        iters = it
+                        break
+                prev = cur.copy()
+
+        if averaging and n_avg > 0:
+            mean = {"rho": sums[0] / n_avg, "ux": sums[1] / n_avg,
+                    "uy": sums[2] / n_avg}
+            diag = self.diagnostics(mean)
+            diag.update({"averaged": True, "n_avg": n_avg,
+                         "average_from": average_from})
+        else:
+            diag = self.diagnostics()
+            diag.update({"averaged": False})
+        diag.update({"iters": iters, "converged": converged, "tau": self.tau,
+                     "history": history})
+        return diag
+
+    def diagnostics(self, fields: dict | None = None) -> dict:
+        """Mass balance and single-vortex diagnostics for a velocity field.
+
+        Pass ``fields`` (dict with ``rho, ux, uy``) to diagnose a time-averaged
+        field; otherwise the current instantaneous state is used.
+
+        Velocities inside solid cells are non-physical (they come from
+        bounced-back populations), so they are zeroed before any spatial
+        gradient or cavity average — otherwise wall-adjacent gradients are
+        contaminated and the circulation sign is unreliable.
+        """
+        geom = self.geom
+        if fields is None:
+            rho, ux, uy = self.macroscopic()
+        else:
+            rho, ux, uy = fields["rho"], fields["ux"], fields["uy"]
+        ux = np.where(self.fluid, ux, 0.0)
+        uy = np.where(self.fluid, uy, 0.0)
+
+        # Mass balance: streamwise mass flux near the inlet vs near the outlet.
+        inflow = float(np.sum((rho * ux)[:, 1][self.fluid[:, 1]]))
+        outflow = float(np.sum((rho * ux)[:, -2][self.fluid[:, -2]]))
+        mass_imbalance = abs(inflow - outflow) / (abs(inflow) + 1e-30)
+
+        # Canyon-cavity vorticity (clockwise => negative w_z for +x wind aloft).
+        wz = np.gradient(uy, axis=1) - np.gradient(ux, axis=0)
+        cav = geom.cavity_mask
+        circulation = float(np.sum(wz[cav]))
+        u_ref = max(self.u_lbm, 1e-12)
+
+        # Rotation sense: the area-integrated cavity vorticity is the robust
+        # measure (negative => clockwise, the skimming-flow sense for +x wind
+        # aloft). Pointwise upper/lower samples are reported for context but are
+        # unreliable near the roof / vortex centre at low resolution.
+        h = geom.h
+        s0, s1 = geom.street
+        cols = slice(s0 + 1, s1 - 1)
+        ux_upper = float(np.mean(ux[2 * h // 3 : h, cols]))
+        ux_lower = float(np.mean(ux[1 : max(2, h // 3), cols]))
+        clockwise = bool(circulation < 0)
+
+        floor_ux = float(np.mean(ux[geom.source_row, s0:s1]))  # street-floor reverse flow
+        xc = (s0 + s1) // 2
+        col = ux[1 : h + 1, xc]
+        nz = col[np.abs(col) > 1e-9 * u_ref]
+        sign_changes = int(np.sum(np.diff(np.sign(nz)) != 0)) if nz.size else 0
+
+        return {
+            "inflow": inflow,
+            "outflow": outflow,
+            "mass_imbalance": mass_imbalance,
+            "cavity_circulation": circulation,
+            "ux_upper_over_uref": ux_upper / u_ref,
+            "ux_lower_over_uref": ux_lower / u_ref,
+            "floor_ux_over_uref": floor_ux / u_ref,
+            "centreline_sign_changes": sign_changes,
+            "clockwise": clockwise,
+            # One recirculation cell, rotating clockwise, with reverse flow along
+            # the street floor -- the hallmarks of the skimming-flow vortex.
+            "single_vortex": bool(sign_changes == 1 and clockwise and floor_ux < 0),
+            "fields": {"rho": rho, "ux": ux, "uy": uy},
+        }
+

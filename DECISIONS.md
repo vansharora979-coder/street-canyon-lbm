@@ -53,6 +53,42 @@ legitimately represent). COST 732 metrics FAC2 / NMSE / hit rate; acceptance
 FAC2 ≥ 0.66. Exact `c+` normalization to be confirmed against the CODASC docs
 before Phase 5 (see `data/validation/README.md`).
 
+## D9 — Canyon boundary conditions (Phase 2)
+Walls (ground + buildings): halfway bounce-back via the solid mask (D3). Top:
+free-slip / specular reflection, applied link-wise from the *post-collision*
+distribution (using the streamed array instead injects momentum and blows up the
+top row). Inlet (west): **non-equilibrium extrapolation** velocity BC (Guo,
+Zheng & Shi 2002) with a log-law profile — the Zou/He velocity inlet seeded a
+growing disturbance at the inlet-top/-ground corners. Outlet (east):
+**constant-pressure** non-equilibrium extrapolation (rho = 1); a velocity-in /
+zero-gradient-out pair does not pin mass and drifts. The free-slip top was
+validated independently against the half-channel analytic profile (zero
+penetration, zero shear at the top).
+
+## D10 — Outlet viscosity sponge
+Even with the non-equilibrium BCs, the (mildly reflective) inlet/outlet sustain a
+domain-spanning acoustic standing wave (~5-7% velocity oscillation) that prevents
+a clean steady state. A **viscosity sponge** over the last few H before the
+outlet (tau ramped smoothly up to ~1.0) absorbs the wake and outgoing acoustic
+waves, breaking the resonance. Implemented as a spatially-varying tau field in
+`lattice.collide_bgk` / `CanyonSimulation`.
+
+## D11 — Unsteady flow => time-averaging (Phase 2 onward)
+The canyon flow is genuinely unsteady above Re ~ O(100) (vortex shedding off the
+wall-mounted buildings); no steady state exists, so `CanyonSimulation.run`
+reports the **time-averaged mean** field over a window after the transient — the
+rigorous choice for a statistically-stationary flow, and the same machinery the
+production high-Re (MRT + Smagorinsky LES) runs will use. For a genuinely steady
+laminar demonstration, Re below ~70 also works (early-stop on the L2 tolerance).
+
+## D12 — Single-vortex diagnostics
+Rotation sense is judged by the **area-integrated cavity vorticity** (negative =>
+clockwise, the skimming sense for +x wind aloft), computed after zeroing the
+non-physical velocities inside solid cells; plus street-floor reverse flow and a
+single sign change of u_x down the canyon centreline. Pointwise upper/lower
+samples are reported for context but are unreliable near the vortex centre at low
+resolution.
+
 ## D8 — Reproducibility plumbing
 `requirements.txt` is pinned from `pip freeze` of the actually-installed
 versions (guarantees the pins resolve). Package installed editable via

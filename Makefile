@@ -29,13 +29,14 @@ lint: ## Lint with ruff if available (non-fatal if not installed).
 	@$(PY) -m ruff check src scripts tests 2>/dev/null || \
 		echo "ruff not installed (optional): pip install ruff"
 
-run: ## Run the Phase 1 Poiseuille validation case.
+run: ## Run the available cases (Phase 1 Poiseuille + Phase 2 canyon demo).
 	$(PY) scripts/run_case.py --poiseuille
+	$(PY) scripts/run_case.py --config configs/canyon_demo.yaml
 
-figures: ## Regenerate all currently-available figures.
+figures: ## Regenerate all currently-available figures (needs results from `run`).
 	$(PY) scripts/make_figures.py
 
-reproduce: setup test figures ## Full reproduction: env -> tests -> figures.
+reproduce: setup test run figures ## Full reproduction: env -> tests -> cases -> figures.
 	@echo "Reproduction complete. See figures/ and results/."
 
 freeze: ## Snapshot the exact installed versions into requirements.txt.
