@@ -22,7 +22,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
-accel = ["numba"]
+# GPU backend (optional): requires a CUDA-capable GPU + driver. Selected at
+# runtime via CANYON_LBM_BACKEND=cupy. NumPy remains the validated reference.
+accel = ["cupy-cuda12x"]
 viz3d = ["pyvista"]
 
 [tool.setuptools.packages.find]

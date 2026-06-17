@@ -71,3 +71,48 @@ def test_viscosity_tau_roundtrip():
         nu = lb.viscosity_from_tau(tau)
         assert lb.tau_from_viscosity(nu) == pytest.approx(tau)
     assert lb.viscosity_from_tau(0.8) == pytest.approx((0.8 - 0.5) / 3.0)
+
+
+def _consistent_feq(f):
+    rho = f.sum(0)
+    ux = (lb.CX[:, None, None] * f).sum(0) / rho
+    uy = (lb.CY[:, None, None] * f).sum(0) / rho
+    return lb.equilibrium(rho, ux, uy)
+
+
+def test_mrt_matrix_invertible():
+    assert np.allclose(lb.M_MRT @ lb.MINV_MRT, np.eye(9))
+
+
+def test_mrt_reduces_to_bgk_when_rates_equal():
+    """With every relaxation rate = 1/tau, MRT is identical to BGK."""
+    f = 0.1 + np.random.default_rng(1).random((9, 8, 9))
+    feq = _consistent_feq(f)
+    tau = 0.8
+    bgk = lb.collide_bgk(f, feq, tau)
+    mrt = lb.collide_mrt(f, feq, s_nu=1 / tau, s_e=1 / tau, s_eps=1 / tau, s_q=1 / tau)
+    assert np.allclose(bgk, mrt, atol=1e-13)
+
+
+def test_mrt_conserves_mass_and_momentum():
+    f = 0.1 + np.random.default_rng(2).random((9, 8, 9))
+    feq = _consistent_feq(f)
+    post = lb.collide_mrt(f, feq, s_nu=1 / 0.7)  # magic non-hydro rates
+    assert np.allclose(post.sum(0), f.sum(0))
+    assert np.allclose((lb.CX[:, None, None] * post).sum(0),
+                       (lb.CX[:, None, None] * f).sum(0))
+    assert np.allclose((lb.CY[:, None, None] * post).sum(0),
+                       (lb.CY[:, None, None] * f).sum(0))
+
+
+def test_smagorinsky_adds_eddy_viscosity_only_in_shear():
+    ny, nx = 8, 9
+    tau0 = np.full((ny, nx), 0.51)
+    # Uniform flow -> zero strain -> tau unchanged.
+    uniform = lb.smagorinsky_tau(np.full((ny, nx), 0.05), np.zeros((ny, nx)),
+                                 tau0, Cs=0.16)
+    assert np.allclose(uniform, tau0)
+    # Sheared flow -> positive eddy viscosity -> larger tau.
+    yy = np.arange(ny)[:, None] * np.ones(nx)
+    shear = lb.smagorinsky_tau(0.01 * yy, np.zeros((ny, nx)), tau0, Cs=0.16)
+    assert np.all(shear >= tau0) and np.max(shear - tau0) > 0

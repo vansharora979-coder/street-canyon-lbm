@@ -18,6 +18,7 @@ import numpy as np
 from . import lattice as lb
 from . import metrics as mt
 from . import scalar as sc
+from .backend import asnumpy, xp
 from .boundary import (
     apply_bounceback,
     freeslip_top,
@@ -226,28 +227,34 @@ class CanyonSimulation:
         with_scalar: bool = False,
         tau_g: float = 1.0,
         source_strength: float = 1.0,
+        Cs: float = 0.16,
     ):
         self.geom = geom
         self.tau = float(tau)
         self.u_lbm = float(u_lbm)
-        self.inlet_ux = np.asarray(inlet_ux, dtype=np.float64)
-        self.inlet_uy = np.zeros_like(self.inlet_ux)
+        # State arrays live on the active backend (NumPy or CuPy/GPU).
+        self.inlet_ux = xp.asarray(inlet_ux, dtype=float)
+        self.inlet_uy = xp.zeros_like(self.inlet_ux)
         self.collision = collision
-        self.solid = geom.solid
-        self.fluid = ~geom.solid
-        self.bb_masks = precompute_bounceback(geom.solid)
+        # MRT non-hydrodynamic relaxation rates (d'Humieres 2002) + LES constant.
+        self.s_e, self.s_eps, self.s_q = 1.19, 1.4, 1.2
+        self.Cs = float(Cs)
+        self.solid = xp.asarray(geom.solid)
+        self.fluid = ~self.solid
+        self.cavity_mask = xp.asarray(geom.cavity_mask)
+        self.bb_masks = precompute_bounceback(self.solid)
 
         # Passive-scalar pollutant (D2Q5 advection-diffusion), one-way coupled.
         self.with_scalar = bool(with_scalar)
         if self.with_scalar:
             self.tau_g = float(tau_g)
-            self.scalar_masks = sc.precompute_bounceback_scalar(geom.solid)
+            self.scalar_masks = sc.precompute_bounceback_scalar(self.solid)
             s0, s1 = geom.street
-            self.source = np.zeros((geom.ny, geom.nx), dtype=np.float64)
+            self.source = xp.zeros((geom.ny, geom.nx), dtype=float)
             self.source[geom.source_row, s0:s1] = source_strength
             self.n_source_cells = s1 - s0
             self.source_rate = float(source_strength * self.n_source_cells)
-            z = np.zeros((geom.ny, geom.nx), dtype=np.float64)
+            z = xp.zeros((geom.ny, geom.nx), dtype=float)
             self.g = sc.equilibrium_scalar(z, z, z)   # clean start, C = 0
 
         # Outlet viscosity sponge: tau ramps smoothly from the bulk value up to
@@ -256,18 +263,18 @@ class CanyonSimulation:
         # sustain a domain-spanning standing wave. Quadratic ramp -> no abrupt
         # impedance jump at the sponge entrance.
         self.sponge_cells = int(sponge_cells)
-        self.tau_field = np.full((geom.ny, geom.nx), self.tau, dtype=np.float64)
+        self.tau_field = xp.full((geom.ny, geom.nx), self.tau, dtype=float)
         if self.sponge_cells > 0:
-            x = np.arange(geom.nx)
+            x = xp.arange(geom.nx)
             start = geom.nx - self.sponge_cells
-            s = np.clip((x - start) / self.sponge_cells, 0.0, 1.0)
+            s = xp.clip((x - start) / self.sponge_cells, 0.0, 1.0)
             self.tau_field[:, :] = self.tau + (tau_sponge - self.tau) * s[None, :] ** 2
 
         # Initialise from rest (rho = 1, u = 0). The inlet is ramped up smoothly
         # in run(), avoiding the startup shock an impulsive profile would slam
         # into the building faces (a classic low-tau BGK blow-up).
-        rho = np.ones((geom.ny, geom.nx), dtype=np.float64)
-        uz = np.zeros((geom.ny, geom.nx), dtype=np.float64)
+        rho = xp.ones((geom.ny, geom.nx), dtype=float)
+        uz = xp.zeros((geom.ny, geom.nx), dtype=float)
         self.f = lb.equilibrium(rho, uz, uz)
 
     @classmethod
@@ -303,25 +310,36 @@ class CanyonSimulation:
         if with_scalar:
             schmidt = float(scfg.get("schmidt", 0.72))
             tau_g = sc.tau_from_schmidt(nu, schmidt)
-        return cls(geom, tau, u_lbm, inlet, collision=flow.get("collision", "bgk"),
+        collision = flow.get("collision", "bgk")
+        les = flow.get("les", {})
+        if collision == "mrt" and les.get("enabled", False):
+            collision = "mrt_les"
+        Cs = float(les.get("Cs", 0.16))
+        return cls(geom, tau, u_lbm, inlet, collision=collision,
                    sponge_cells=sponge_cells,
                    tau_sponge=float(flow.get("tau_sponge", 1.0)),
                    with_scalar=with_scalar, tau_g=tau_g,
-                   source_strength=float(scfg.get("source_strength", 1.0)))
+                   source_strength=float(scfg.get("source_strength", 1.0)),
+                   Cs=Cs)
 
-    def _collide(self, f, feq):
+    def _collide(self, f, feq, ux, uy):
         if self.collision == "bgk":
             return lb.collide_bgk(f, feq, self.tau_field)
-        raise NotImplementedError(
-            f"collision='{self.collision}' is not available yet "
-            "(MRT/Smagorinsky land in the high-Re escalation phase)."
-        )
+        if self.collision in ("mrt", "mrt_les"):
+            if self.collision == "mrt_les":
+                tau_eff = lb.smagorinsky_tau(ux, uy, self.tau_field, self.Cs,
+                                             self.fluid)
+                s_nu = 1.0 / tau_eff
+            else:
+                s_nu = 1.0 / self.tau_field
+            return lb.collide_mrt(f, feq, s_nu, self.s_e, self.s_eps, self.s_q)
+        raise NotImplementedError(f"unknown collision '{self.collision}'")
 
     def step(self, inlet_scale: float = 1.0) -> None:
         f = self.f
         rho, ux, uy = lb.macroscopic(f)
         feq = lb.equilibrium(rho, ux, uy)
-        fpost = self._collide(f, feq)
+        fpost = self._collide(f, feq, ux, uy)
         fnew = lb.stream(fpost)
         apply_bounceback(fnew, fpost, self.bb_masks)       # ground + buildings
         inlet_velocity_neq(                                # inlet (west)
@@ -390,27 +408,27 @@ class CanyonSimulation:
             if averaging and it >= average_from:
                 rho, ux, uy = self.macroscopic()
                 if sums is None:
-                    sums = [np.zeros_like(rho) for _ in range(3)]
+                    sums = [xp.zeros_like(rho) for _ in range(3)]
                 sums[0] += rho; sums[1] += ux; sums[2] += uy
                 n_avg += 1
                 if self.with_scalar:
                     C = sc.scalar_concentration(self.g)
                     if scal_C_sum is None:
-                        scal_C_sum = np.zeros_like(C)
+                        scal_C_sum = xp.zeros_like(C)
                     scal_C_sum += C
-                    scal_content_sum += float(C[self.geom.cavity_mask].sum())
+                    scal_content_sum += float(C[self.cavity_mask].sum())
                     # Total scalar flux across the roof opening = advective +
                     # diffusive (Fick). At this laminar Re the roof exchange is
                     # diffusion-dominated (mean vertical velocity ~0 in the
                     # recirculation), so both terms are needed for the budget.
                     adv = C[orow, s0:s1] * uy[orow, s0:s1]
                     diff = -D_scal * (C[orow, s0:s1] - C[orow - 1, s0:s1])
-                    scal_flux_sum += float(np.sum(adv + diff))
+                    scal_flux_sum += float(xp.sum(adv + diff))
 
             if it % check_every == 0:
                 _, ux, uy = self.macroscopic()
-                speed = np.sqrt(ux * ux + uy * uy)
-                smax = float(np.nanmax(speed))
+                speed = xp.sqrt(ux * ux + uy * uy)
+                smax = float(xp.nanmax(speed))
                 if not np.isfinite(smax) or smax > 0.4:
                     raise FloatingPointError(
                         f"Unstable at iter {it}: max speed = {smax:.3g} "
@@ -419,7 +437,7 @@ class CanyonSimulation:
                 cur = speed[self.fluid]
                 if prev is not None and it > ramp_iters:
                     change = float(
-                        np.linalg.norm(cur - prev) / (np.linalg.norm(cur) + 1e-30)
+                        xp.linalg.norm(cur - prev) / (xp.linalg.norm(cur) + 1e-30)
                     )
                     history.append((it, change))
                     if verbose:
@@ -427,7 +445,7 @@ class CanyonSimulation:
                         extra = ""
                         if self.with_scalar:
                             content = float(
-                                sc.scalar_concentration(self.g)[self.geom.cavity_mask].sum()
+                                sc.scalar_concentration(self.g)[self.cavity_mask].sum()
                             )
                             extra = f"  content={content:.3e}"
                         print(f"  it={it:7d}  d(speed)={change:.3e}  umax={smax:.4f}"
@@ -445,18 +463,17 @@ class CanyonSimulation:
             diag.update({"averaged": True, "n_avg": n_avg,
                          "average_from": average_from})
             if self.with_scalar and scal_C_sum is not None:
-                mean_C = scal_C_sum / n_avg
                 diag["scalar"] = self._scalar_metrics(
                     scal_content_sum / n_avg, scal_flux_sum / n_avg)
-                diag["mean_C"] = mean_C
+                diag["mean_C"] = asnumpy(scal_C_sum / n_avg)
         else:
             diag = self.diagnostics()
             diag.update({"averaged": False})
             if self.with_scalar:
                 C = sc.scalar_concentration(self.g)
-                content = float(C[self.geom.cavity_mask].sum())
-                diag["scalar"] = self._scalar_metrics(content, np.nan)
-                diag["mean_C"] = C
+                content = float(C[self.cavity_mask].sum())
+                diag["scalar"] = self._scalar_metrics(content, float("nan"))
+                diag["mean_C"] = asnumpy(C)
         diag.update({"iters": iters, "converged": converged, "tau": self.tau,
                      "history": history})
         return diag
@@ -493,18 +510,18 @@ class CanyonSimulation:
             rho, ux, uy = self.macroscopic()
         else:
             rho, ux, uy = fields["rho"], fields["ux"], fields["uy"]
-        ux = np.where(self.fluid, ux, 0.0)
-        uy = np.where(self.fluid, uy, 0.0)
+        ux = xp.where(self.fluid, ux, 0.0)
+        uy = xp.where(self.fluid, uy, 0.0)
 
         # Mass balance: streamwise mass flux near the inlet vs near the outlet.
-        inflow = float(np.sum((rho * ux)[:, 1][self.fluid[:, 1]]))
-        outflow = float(np.sum((rho * ux)[:, -2][self.fluid[:, -2]]))
+        inflow = float(xp.sum((rho * ux)[:, 1][self.fluid[:, 1]]))
+        outflow = float(xp.sum((rho * ux)[:, -2][self.fluid[:, -2]]))
         mass_imbalance = abs(inflow - outflow) / (abs(inflow) + 1e-30)
 
         # Canyon-cavity vorticity (clockwise => negative w_z for +x wind aloft).
-        wz = np.gradient(uy, axis=1) - np.gradient(ux, axis=0)
-        cav = geom.cavity_mask
-        circulation = float(np.sum(wz[cav]))
+        wz = xp.gradient(uy, axis=1) - xp.gradient(ux, axis=0)
+        cav = self.cavity_mask
+        circulation = float(xp.sum(wz[cav]))
         u_ref = max(self.u_lbm, 1e-12)
 
         # Rotation sense: the area-integrated cavity vorticity is the robust
@@ -514,15 +531,15 @@ class CanyonSimulation:
         h = geom.h
         s0, s1 = geom.street
         cols = slice(s0 + 1, s1 - 1)
-        ux_upper = float(np.mean(ux[2 * h // 3 : h, cols]))
-        ux_lower = float(np.mean(ux[1 : max(2, h // 3), cols]))
+        ux_upper = float(xp.mean(ux[2 * h // 3 : h, cols]))
+        ux_lower = float(xp.mean(ux[1 : max(2, h // 3), cols]))
         clockwise = bool(circulation < 0)
 
-        floor_ux = float(np.mean(ux[geom.source_row, s0:s1]))  # street-floor reverse flow
+        floor_ux = float(xp.mean(ux[geom.source_row, s0:s1]))  # street-floor reverse flow
         xc = (s0 + s1) // 2
         col = ux[1 : h + 1, xc]
-        nz = col[np.abs(col) > 1e-9 * u_ref]
-        sign_changes = int(np.sum(np.diff(np.sign(nz)) != 0)) if nz.size else 0
+        nz = col[xp.abs(col) > 1e-9 * u_ref]
+        sign_changes = int(xp.sum(xp.diff(xp.sign(nz)) != 0)) if int(nz.size) else 0
 
         return {
             "inflow": inflow,
@@ -537,6 +554,6 @@ class CanyonSimulation:
             # One recirculation cell, rotating clockwise, with reverse flow along
             # the street floor -- the hallmarks of the skimming-flow vortex.
             "single_vortex": bool(sign_changes == 1 and clockwise and floor_ux < 0),
-            "fields": {"rho": rho, "ux": ux, "uy": uy},
+            "fields": {"rho": asnumpy(rho), "ux": asnumpy(ux), "uy": asnumpy(uy)},
         }
 

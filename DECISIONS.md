@@ -117,6 +117,29 @@ because it is accumulated from instantaneous C and u, not the product of means):
 - **CODASC c+** = `C·U_H·H·L_src/Q` (a constant rescaling of C; exact L_src/units
   convention finalized against the CODASC docs in Phase 5, see D7).
 
+## D16 — High-Re stability: MRT + Smagorinsky LES (Phase 4)
+At the CODASC-scale simulated Re ~ 1e4 the relaxation time is tau ~ 0.5004-0.5007
+(s_nu -> 2), where plain BGK is unconditionally unstable. We escalate to **MRT**
+(Lallemand & Luo moment basis; non-hydrodynamic "magic" rates s_e=1.19,
+s_eps=1.4, s_q=1.2 from d'Humieres 2002) plus a **Smagorinsky LES** eddy
+viscosity (Cs=0.16; strain from central differences, added as a local tau field
+on top of the sponge). Validated: MRT reduces to BGK exactly when all rates equal
+1/tau (machine precision), conserves mass+momentum, M@M^-1=I; LES adds eddy
+viscosity only in shear. Confirmed **stable at Re=1e4** on grids 24 and 48
+(coarsest = hardest); the instantaneous field is turbulent (so single-vortex /
+mass-balance are only clean after time-averaging, as at Re=100). Chosen by the
+user over the laminar Plan B (HPC enables it).
+
+## D17 — GPU backend via CuPy (Phase 4)
+The from-scratch solver is pure array operations, so a thin backend module
+(`backend.py`) selects NumPy (default, the validated reference) or CuPy (GPU) via
+the `CANYON_LBM_BACKEND` env var at import. **NumPy stays the reference**; CuPy
+is validated to reproduce it to round-off (BGK rel diff ~4e-14, MRT+LES ~2e-12 on
+a deterministic laminar case). Measured GPU speedup on the RTX 4090: ~13x at
+96 cells/H (165 -> 12.8 ms/step), turning the ~7-hour grid sweep into ~1 hour.
+CuPy is an **optional** dependency (`pip install -e .[accel]`); the pinned
+`requirements.txt` stays CPU-only so a no-GPU checkout still reproduces.
+
 ## D8 — Reproducibility plumbing
 `requirements.txt` is pinned from `pip freeze` of the actually-installed
 versions (guarantees the pins resolve). Package installed editable via
