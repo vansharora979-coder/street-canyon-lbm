@@ -56,27 +56,30 @@ def _run_canyon(config: dict) -> None:
     )
     fields = out.pop("fields")
     out.pop("history", None)
+    mean_C = out.pop("mean_C", None)
 
     ar_tag = f"{geom.aspect_ratio:g}".replace(".", "p")
     npz = ROOT / "results" / f"canyon_AR{ar_tag}.npz"
     npz.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        npz,
+    arrays = dict(
         ux=fields["ux"], uy=fields["uy"], rho=fields["rho"], solid=geom.solid,
         h=geom.h, w=geom.w, b=geom.b, aspect_ratio=geom.aspect_ratio,
         street=np.array(geom.street), west_building=np.array(geom.west_building),
         east_building=np.array(geom.east_building), roof_row=geom.roof_row,
         u_lbm=sim.u_lbm,
     )
+    if mean_C is not None:
+        arrays["C"] = mean_C
+    np.savez_compressed(npz, **arrays)
     summary = ROOT / "results" / f"canyon_AR{ar_tag}.json"
-    io.save_result(summary, out, config=config,
-                   extra={"fields_file": npz.name})
-    print(json.dumps(
-        {k: out.get(k) for k in
-         ("converged", "averaged", "n_avg", "iters", "single_vortex", "clockwise",
-          "centreline_sign_changes", "ux_upper_over_uref", "ux_lower_over_uref",
-          "floor_ux_over_uref", "cavity_circulation", "mass_imbalance")},
-        indent=2, default=float))
+    io.save_result(summary, out, config=config, extra={"fields_file": npz.name})
+
+    keys = ["converged", "averaged", "n_avg", "iters", "single_vortex", "clockwise",
+            "cavity_circulation", "mass_imbalance"]
+    summ = {k: out.get(k) for k in keys}
+    if "scalar" in out:
+        summ["scalar"] = out["scalar"]
+    print(json.dumps(summ, indent=2, default=float))
     print(f"\nFields -> {npz.relative_to(ROOT)}; summary+metadata -> "
           f"{summary.relative_to(ROOT)}")
 

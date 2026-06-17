@@ -53,8 +53,8 @@ Work is phase-gated; **grid-independence (Phase 4)** and **CODASC validation
 | 0 | Bootstrap / scaffold | ✅ done |
 | 1 | D2Q9 BGK core + Poiseuille validation | ✅ done |
 | 2 | Canyon geometry + boundary conditions | ✅ done |
-| 3 | Passive-scalar pollutant + ventilation metric | ⏳ next |
-| 4 | Grid-independence study (gate) | — |
+| 3 | Passive-scalar pollutant + ventilation metric | ✅ done |
+| 4 | Grid-independence study (gate) | ⏳ next |
 | 5 | CODASC validation (gate) | — |
 | 6 | Production aspect-ratio sweep | — |
 | 7 | Figures (≥5) | — |

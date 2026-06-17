@@ -100,6 +100,53 @@ def plot_canyon_flow(npz_path: str | Path, path: str | Path,
     return _save(fig, path)
 
 
+def plot_canyon_concentration(npz_path: str | Path, path: str | Path,
+                              title: str | None = None) -> list[Path]:
+    """Time-averaged pollutant concentration in the canyon (zoom), buildings
+    overlaid, streamlines showing how the vortex traps the scalar near the
+    leeward wall. Reads the ``.npz`` written by ``scripts/run_case.py`` (needs
+    the ``C`` field, i.e. a scalar-enabled run)."""
+    import numpy as np
+
+    d = np.load(npz_path)
+    if "C" not in d.files:
+        raise KeyError(f"{npz_path} has no 'C' field (run with a scalar config).")
+    C = d["C"]; solid = d["solid"]; ux = d["ux"]; uy = d["uy"]
+    ny, nx = C.shape
+    h = int(d["h"]); s0, s1 = (int(v) for v in d["street"])
+    w0 = int(d["west_building"][0]); e1 = int(d["east_building"][1])
+    Cm = np.where(solid, np.nan, C)
+    uxm = np.where(solid, 0.0, ux); uym = np.where(solid, 0.0, uy)
+    # Normalise by the canyon-mean so the colour scale is comparable across H/W.
+    cav = np.zeros_like(solid); cav[1:h + 1, s0:s1] = True
+    Cref = float(np.nanmean(C[cav])) or 1.0
+
+    pad = int(0.8 * h)
+    x0, x1 = max(0, w0 - pad), min(nx, e1 + pad)
+    y0, y1 = 0, min(ny, h + pad)
+    sl = (slice(y0, y1), slice(x0, x1))
+    Xc, Yc = np.meshgrid(np.arange(x0, x1), np.arange(y0, y1))
+
+    fig, ax = plt.subplots(figsize=(9, 4.2))
+    pm = ax.pcolormesh(Xc, Yc, Cm[sl] / Cref, cmap="inferno", shading="auto",
+                       vmin=0, vmax=max(2.0, np.nanpercentile(Cm[cav] / Cref, 95)))
+    ax.streamplot(Xc, Yc, uxm[sl], uym[sl], color="white", density=1.4,
+                  linewidth=0.5, arrowsize=0.7)
+    _add_buildings(ax, d, color="0.4")
+    ax.axhline(h + 0.5, color="cyan", ls="--", lw=1.0, zorder=6,
+               label="canyon opening")
+    ax.plot([s0, s1 - 1], [1, 1], "s", color="lime", ms=3, zorder=7,
+            label="street source")
+    ax.set_title(title or "Time-averaged pollutant concentration, H/W = 1")
+    ax.set_xlabel("x (cells)"); ax.set_ylabel("y (cells)")
+    ax.set_xlim(x0, x1 - 1); ax.set_ylim(y0, y1 - 1)
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.7)
+    fig.colorbar(pm, ax=ax, label=r"$C / \langle C \rangle_{canyon}$",
+                 fraction=0.025, pad=0.01)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
 def plot_poiseuille(result: dict, path: str | Path) -> list[Path]:
     """Numeric vs analytic Poiseuille profile with the relative error annotated."""
     y = result["y"]

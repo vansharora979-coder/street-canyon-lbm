@@ -37,4 +37,4 @@ configs (base, validation_codasc, sweep_aspect_ratio); tests; paper (IMRaD); res
 - Record design choices in DECISIONS.md; running progress in PROGRESS.md.
 
 ## Status
-See PROGRESS.md and DECISIONS.md. (Phases 0–2 complete; awaiting go-ahead for Phase 3.)
+See PROGRESS.md and DECISIONS.md. (Phases 0–3 complete; awaiting go-ahead for Phase 4.)

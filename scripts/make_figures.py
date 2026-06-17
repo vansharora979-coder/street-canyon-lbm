@@ -47,9 +47,26 @@ def fig_canyon_flow() -> None:
     print(f"  canyon_flow_HW1 -> {', '.join(p.name for p in paths)}")
 
 
+def fig_canyon_concentration() -> None:
+    """Plot the time-averaged pollutant field from the saved scalar-enabled run."""
+    npz = ROOT / "results" / "canyon_AR1.npz"
+    if not npz.exists():
+        print("  canyon_concentration_HW1  SKIPPED (no results/canyon_AR1.npz).")
+        return
+    import numpy as np
+    if "C" not in np.load(npz).files:
+        print("  canyon_concentration_HW1  SKIPPED (run canyon with a scalar config).")
+        return
+    paths = viz.plot_canyon_concentration(
+        npz, FIGDIR / "canyon_concentration_HW1",
+        title="Time-averaged pollutant concentration, H/W = 1")
+    print(f"  canyon_concentration_HW1 -> {', '.join(p.name for p in paths)}")
+
+
 FIGURES = {
     "poiseuille_validation": fig_poiseuille_validation,
     "canyon_flow_HW1": fig_canyon_flow,
+    "canyon_concentration_HW1": fig_canyon_concentration,
 }
 
 

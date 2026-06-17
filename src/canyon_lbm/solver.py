@@ -16,6 +16,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from . import lattice as lb
+from . import metrics as mt
+from . import scalar as sc
 from .boundary import (
     apply_bounceback,
     freeslip_top,
@@ -221,6 +223,9 @@ class CanyonSimulation:
         collision: str = "bgk",
         sponge_cells: int = 0,
         tau_sponge: float = 1.0,
+        with_scalar: bool = False,
+        tau_g: float = 1.0,
+        source_strength: float = 1.0,
     ):
         self.geom = geom
         self.tau = float(tau)
@@ -231,6 +236,19 @@ class CanyonSimulation:
         self.solid = geom.solid
         self.fluid = ~geom.solid
         self.bb_masks = precompute_bounceback(geom.solid)
+
+        # Passive-scalar pollutant (D2Q5 advection-diffusion), one-way coupled.
+        self.with_scalar = bool(with_scalar)
+        if self.with_scalar:
+            self.tau_g = float(tau_g)
+            self.scalar_masks = sc.precompute_bounceback_scalar(geom.solid)
+            s0, s1 = geom.street
+            self.source = np.zeros((geom.ny, geom.nx), dtype=np.float64)
+            self.source[geom.source_row, s0:s1] = source_strength
+            self.n_source_cells = s1 - s0
+            self.source_rate = float(source_strength * self.n_source_cells)
+            z = np.zeros((geom.ny, geom.nx), dtype=np.float64)
+            self.g = sc.equilibrium_scalar(z, z, z)   # clean start, C = 0
 
         # Outlet viscosity sponge: tau ramps smoothly from the bulk value up to
         # tau_sponge over the last `sponge_cells` columns, absorbing the wake and
@@ -277,9 +295,19 @@ class CanyonSimulation:
             z0 = float(flow.get("z0_over_H", 0.01)) * n
             inlet = log_law_profile(geom.ny, geom.h, u_lbm, z0_cells=z0)
         sponge_cells = int(round(float(flow.get("sponge_H", 0.0)) * n))
+
+        # Optional passive scalar (Phase 3): enabled by a `scalar` config block.
+        scfg = config.get("scalar", {})
+        with_scalar = bool(scfg) and scfg.get("enabled", True)
+        tau_g = 1.0
+        if with_scalar:
+            schmidt = float(scfg.get("schmidt", 0.72))
+            tau_g = sc.tau_from_schmidt(nu, schmidt)
         return cls(geom, tau, u_lbm, inlet, collision=flow.get("collision", "bgk"),
                    sponge_cells=sponge_cells,
-                   tau_sponge=float(flow.get("tau_sponge", 1.0)))
+                   tau_sponge=float(flow.get("tau_sponge", 1.0)),
+                   with_scalar=with_scalar, tau_g=tau_g,
+                   source_strength=float(scfg.get("source_strength", 1.0)))
 
     def _collide(self, f, feq):
         if self.collision == "bgk":
@@ -302,6 +330,19 @@ class CanyonSimulation:
         outlet_pressure_neq(fnew, rho_b=1.0)               # constant-pressure outlet
         freeslip_top(fnew, fpost)                          # free-slip top
         self.f = fnew
+
+        if self.with_scalar:
+            # Advect the pollutant with the just-updated velocity field.
+            _, ux, uy = lb.macroscopic(self.f)
+            C = sc.scalar_concentration(self.g)
+            geq = sc.equilibrium_scalar(C, ux, uy)
+            gpost = sc.collide_scalar(self.g, geq, self.tau_g, source=self.source)
+            gnew = sc.stream_scalar(gpost)
+            sc.apply_bounceback_scalar(gnew, gpost, self.scalar_masks)  # zero-flux walls
+            sc.inlet_zero_concentration(gnew)              # clean air in
+            sc.open_outlet(gnew)                           # pollutant advects out
+            sc.open_top(gnew)
+            self.g = gnew
 
     def macroscopic(self):
         return lb.macroscopic(self.f)
@@ -336,6 +377,12 @@ class CanyonSimulation:
         averaging = average_from is not None
         sums = None
         n_avg = 0
+        scal_C_sum = None
+        scal_content_sum = 0.0
+        scal_flux_sum = 0.0
+        orow = self.geom.roof_row + 1  # first fluid row above the cavity
+        s0, s1 = self.geom.street
+        D_scal = sc.diffusivity_from_tau(self.tau_g) if self.with_scalar else 0.0
         for it in range(1, max_iter + 1):
             scale = min(1.0, it / ramp_iters) if ramp_iters > 0 else 1.0
             self.step(inlet_scale=scale)
@@ -346,6 +393,19 @@ class CanyonSimulation:
                     sums = [np.zeros_like(rho) for _ in range(3)]
                 sums[0] += rho; sums[1] += ux; sums[2] += uy
                 n_avg += 1
+                if self.with_scalar:
+                    C = sc.scalar_concentration(self.g)
+                    if scal_C_sum is None:
+                        scal_C_sum = np.zeros_like(C)
+                    scal_C_sum += C
+                    scal_content_sum += float(C[self.geom.cavity_mask].sum())
+                    # Total scalar flux across the roof opening = advective +
+                    # diffusive (Fick). At this laminar Re the roof exchange is
+                    # diffusion-dominated (mean vertical velocity ~0 in the
+                    # recirculation), so both terms are needed for the budget.
+                    adv = C[orow, s0:s1] * uy[orow, s0:s1]
+                    diff = -D_scal * (C[orow, s0:s1] - C[orow - 1, s0:s1])
+                    scal_flux_sum += float(np.sum(adv + diff))
 
             if it % check_every == 0:
                 _, ux, uy = self.macroscopic()
@@ -364,8 +424,14 @@ class CanyonSimulation:
                     history.append((it, change))
                     if verbose:
                         tag = " [avg]" if (averaging and it >= average_from) else ""
-                        print(f"  it={it:7d}  d(speed)={change:.3e}  umax={smax:.4f}{tag}",
-                              flush=True)
+                        extra = ""
+                        if self.with_scalar:
+                            content = float(
+                                sc.scalar_concentration(self.g)[self.geom.cavity_mask].sum()
+                            )
+                            extra = f"  content={content:.3e}"
+                        print(f"  it={it:7d}  d(speed)={change:.3e}  umax={smax:.4f}"
+                              f"{extra}{tag}", flush=True)
                     if not averaging and change < tol:
                         converged = True
                         iters = it
@@ -378,12 +444,38 @@ class CanyonSimulation:
             diag = self.diagnostics(mean)
             diag.update({"averaged": True, "n_avg": n_avg,
                          "average_from": average_from})
+            if self.with_scalar and scal_C_sum is not None:
+                mean_C = scal_C_sum / n_avg
+                diag["scalar"] = self._scalar_metrics(
+                    scal_content_sum / n_avg, scal_flux_sum / n_avg)
+                diag["mean_C"] = mean_C
         else:
             diag = self.diagnostics()
             diag.update({"averaged": False})
+            if self.with_scalar:
+                C = sc.scalar_concentration(self.g)
+                content = float(C[self.geom.cavity_mask].sum())
+                diag["scalar"] = self._scalar_metrics(content, np.nan)
+                diag["mean_C"] = C
         diag.update({"iters": iters, "converged": converged, "tau": self.tau,
                      "history": history})
         return diag
+
+    def _scalar_metrics(self, content: float, opening_flux: float) -> dict:
+        """Ventilation metrics from the (time-averaged) canyon pollutant content."""
+        g = self.geom
+        n_cav = int(g.cavity_mask.sum())
+        vent = mt.ventilation_index(self.source_rate, content, g.h, self.u_lbm)
+        return {
+            "canyon_content": content,
+            "retention_mean_conc": content / max(n_cav, 1),
+            "ventilation_index": vent,                  # ACH* = w_e/U_H
+            "opening_flux": opening_flux,
+            "source_rate": self.source_rate,
+            "flux_over_source": (opening_flux / self.source_rate
+                                 if self.source_rate else float("nan")),
+            "tau_g": self.tau_g,
+        }
 
     def diagnostics(self, fields: dict | None = None) -> dict:
         """Mass balance and single-vortex diagnostics for a velocity field.

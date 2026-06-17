@@ -9,7 +9,7 @@ type: canyon
 seed: 12345
 
 resolution:
-  cells_per_H: 32
+  cells_per_H: 24            # demo resolution (Phase 4 sets the production grid)
 
 geometry:
   aspect_ratio: 1.0
@@ -27,9 +27,16 @@ flow:
   sponge_H: 4.0              # outlet viscosity sponge length (absorbs wake + acoustics)
   tau_sponge: 1.0
 
+scalar:                      # passive pollutant (Phase 3)
+  enabled: true
+  schmidt: 0.72              # Sc = nu/D
+  source_strength: 1.0       # arbitrary; metrics are normalized
+
 run:
-  max_iter: 100000
+  # The canyon clearance timescale is ~20k steps, so the pollutant content needs
+  # ~80k steps to plateau before the metric is meaningful; then time-average.
+  max_iter: 140000
   steady_tol: 1.0e-5
-  check_every: 2000
+  check_every: 4000
   ramp_iters: 8000
-  average_from: 40000        # time-average the (statistically stationary) flow over the last 60k steps
+  average_from: 80000        # average flow + scalar over the last 60k steps

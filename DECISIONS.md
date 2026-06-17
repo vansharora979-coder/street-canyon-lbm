@@ -89,6 +89,34 @@ single sign change of u_x down the canyon centreline. Pointwise upper/lower
 samples are reported for context but are unreliable near the vortex centre at low
 resolution.
 
+## D13 — Passive scalar: D2Q5 advection-diffusion LBM (Phase 3)
+A separate 5-velocity population `g` (rest + 4 neighbours) with the **linear**
+advection-diffusion equilibrium `g_i^eq = w_i C (1 + e_i.u/c_s^2)`, one-way
+coupled to the D2Q9 flow (the scalar is passive). Diffusivity `D = c_s^2(tau_g-1/2)`;
+`tau_g` from the Schmidt number `Sc = nu/D` (default 0.72). Verified against
+analytic cases: pure-diffusion variance growth `var = var0 + 2Dt` (0.0% error,
+mass conserved to machine precision) and uniform advection (centre of mass
+translates exactly at `u`).
+
+## D14 — Scalar boundary conditions
+Walls (ground + buildings): **zero-flux** (insulating, non-absorbing pollutant)
+via bounce-back of `g`. Inlet (west): **C = 0** Dirichlet (clean approach air).
+Outlet (east) and top: **open** (zero-gradient) so pollutant leaves. Source: a
+continuous **line source at the street floor** (row 1, street columns), added as
+`g_i += w_i S` each step. No sponge needed for the scalar (advection-diffusion,
+no acoustics).
+
+## D15 — Ventilation metrics
+Reported on the **time-averaged** fields (the flux includes turbulent transport
+because it is accumulated from instantaneous C and u, not the product of means):
+- **retention** = canyon-mean concentration (higher => worse ventilation);
+- **ventilation index** ACH* = w_e/U_H = `Q·H/(content·U_H)` (higher => better);
+  these are inverse measures (the brief's "two equivalent ways").
+- **conservation check**: the advective flux across the roof-opening plane should
+  balance the source rate Q at steady state.
+- **CODASC c+** = `C·U_H·H·L_src/Q` (a constant rescaling of C; exact L_src/units
+  convention finalized against the CODASC docs in Phase 5, see D7).
+
 ## D8 — Reproducibility plumbing
 `requirements.txt` is pinned from `pip freeze` of the actually-installed
 versions (guarantees the pins resolve). Package installed editable via

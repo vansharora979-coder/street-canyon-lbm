@@ -54,9 +54,34 @@
 - **Tests:** 27 pass (added geometry, free-slip, and canyon stability/mass/
   single-vortex/config-driven tests).
 
-## Next — Phase 3 (awaiting go-ahead)
-Passive-scalar pollutant (D2Q5 advection-diffusion) with a street-level line
-source; steady/again time-averaged detection; retention, ACH/exchange velocity,
-and CODASC c+ metrics. (Production high-Re via MRT + Smagorinsky LES is the
-escalation flagged for the Phase 4/5 gates; the time-averaging + sponge built
-here carry forward.)
+## Phase 3 — Passive-scalar pollutant + ventilation metric ✅
+- **D2Q5 advection-diffusion scalar** (`scalar.py`): linear ADE equilibrium,
+  one-way coupled to the flow, `tau_g` from the Schmidt number; zero-flux walls,
+  clean-air (C=0) inlet, open outlet/top, continuous street-floor line source.
+- **Verified on analytic cases** (the Phase 3 gate):
+  - pure diffusion: variance grows as `var0 + 2Dt` to **0.0%** error, mass
+    conserved to machine precision;
+  - uniform advection: centre of mass translates **exactly** at u;
+  - closed-box source injects at exactly the prescribed rate.
+- **Metrics** (`metrics.py`): retention (canyon-mean C), normalized air-exchange
+  index ACH* = w_e/U_H = Q·H/(content·U_H), total roof-opening flux
+  (advective + diffusive), and CODASC c+.
+- **H/W = 1 demo** (`configs/canyon_demo.yaml`, Re=100, scalar, time-averaged):
+  - flow stays a clean single clockwise vortex (circulation −0.062, mass
+    imbalance 0.09%) with the scalar coupled;
+  - canyon pollutant content **plateaus** (rose smoothly to ~6.4e5 then flat to
+    <0.3%) → **the metric is stable once equilibrated** (the AC);
+  - roof-opening flux balances the source to ~92% (advective ~5 + diffusive ~18
+    ≈ source 24) — conservation confirmed; the exchange is **diffusion-dominated**
+    at this laminar Re (mean roof vertical velocity ~0 in the recirculation);
+  - figure `figures/canyon_concentration_HW1.{png,svg}` shows the pollutant
+    trapped on the **leeward wall + street floor** (the classic skimming pattern).
+- **Tests:** 36 pass (added D2Q5 ADE verification, source injection, coupled
+  canyon scalar, and ventilation-metric tests).
+
+## Next — Phase 4 (HARD gate, awaiting go-ahead)
+Grid-independence at H/W = 1: run the metric at increasing resolution
+(e.g. 24/48/96 cells/H) and select the production grid where the metric changes
+< ~2–3% between the two finest grids. Then Phase 5 (CODASC validation). The
+high-Re escalation (MRT + Smagorinsky LES) is implemented as part of/just before
+these gates; the sponge + time-averaging built so far carry forward.
