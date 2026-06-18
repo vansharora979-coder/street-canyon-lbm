@@ -190,6 +190,30 @@ turbulent validation is an explicit, stated limitation (no overclaiming). The
 production H/W sweep runs Péclet-matched (advection-dominated) and clearly
 labelled as an idealized laminar exploration.
 
+## D20 — (2026-06-18) LES + GCI ("options 2+3") reconsidered and REJECTED
+Mid-Phase-6 it was proposed to reopen the turbulent regime: MRT + Smagorinsky LES
+at high Re, report a Grid Convergence Index (GCI) as "error bars", and present a
+dual laminar/turbulent result. **Rejected** — it contradicts locked decisions for
+reasons already in the repo:
+1. **2-D LES grid-independence is ill-posed (D18, Phase 4b).** The Smagorinsky
+   sub-grid filter scales with cell size, so refining the grid changes the
+   effective Reynolds number; the ventilation metric never settles (it moved ~3x
+   from n=24 to n=48 at Re=2000). Structural to 2-D LES, not a tuning issue.
+2. **GCI is invalid here.** GCI assumes the solution is in the asymptotic,
+   monotonic-convergence range. Our logs show the opposite for the turbulent/
+   transitional cases (~3x LES drift; NEGATIVE Richardson order from shedding at
+   Re=150). Reporting a GCI band on a non-convergent solution would overclaim and
+   break the no-overclaim rule (CLAUDE.md).
+3. **The regime is already locked and gated (D18/D19):** steady-laminar Re=25,
+   BGK, no LES, 48 cells/H, Péclet-matched; grid-converged (48→96 = 0.0%); CODASC
+   compared qualitatively; asymmetry shown to be a Péclet effect.
+**Turbulent route, if ever wanted = steady RANS (k-epsilon / k-omega)** — it
+grid-converges and is what CODASC-validated canyon studies use. But there is no
+RANS in this codebase, adding a two-equation closure to the LBM is a major build,
+and 2-D RANS still cannot capture 3-D along-canyon exchange. **Recorded as future
+work; not built now.** The study stands as the sanctioned 2-D laminar
+proof-of-method.
+
 ## D8 — Reproducibility plumbing
 `requirements.txt` is pinned from `pip freeze` of the actually-installed
 versions (guarantees the pins resolve). Package installed editable via

@@ -85,12 +85,46 @@ def fig_codasc_validation() -> None:
     print(f"  codasc_validation -> {', '.join(p.name for p in paths)}")
 
 
+def fig_les_grid_divergence() -> None:
+    """Methods figure: 2-D LES grid-divergence vs laminar convergence."""
+    les = ROOT / "results" / "grid_independence_Re2k_failed.csv"
+    lam = ROOT / "results" / "grid_independence.csv"
+    if not (les.exists() and lam.exists()):
+        print("  les_grid_divergence  SKIPPED (need both grid_independence CSVs).")
+        return
+    paths = viz.plot_les_grid_divergence(les, lam, FIGDIR / "les_grid_divergence")
+    print(f"  les_grid_divergence -> {', '.join(p.name for p in paths)}")
+
+
+def fig_pe_sensitivity() -> None:
+    """Headline figure: leeward/windward asymmetry vs Peclet number."""
+    csv = ROOT / "results" / "pe_sensitivity.summary.csv"
+    if not csv.exists():
+        print("  pe_sensitivity  SKIPPED (run scripts/pe_sensitivity.py first).")
+        return
+    paths = viz.plot_pe_sensitivity(csv, FIGDIR / "pe_sensitivity_asymmetry")
+    print(f"  pe_sensitivity_asymmetry -> {', '.join(p.name for p in paths)}")
+
+
+def fig_aspect_ratio_sweep() -> None:
+    """Primary curve: ventilation vs H/W with Oke regime bands."""
+    csv = ROOT / "results" / "sweep_aspect_ratio.summary.csv"
+    if not csv.exists():
+        print("  aspect_ratio_sweep  SKIPPED (run scripts/run_sweep.py first).")
+        return
+    paths = viz.plot_aspect_ratio_sweep(csv, FIGDIR / "metric_vs_aspect_ratio")
+    print(f"  metric_vs_aspect_ratio -> {', '.join(p.name for p in paths)}")
+
+
 FIGURES = {
     "poiseuille_validation": fig_poiseuille_validation,
     "canyon_flow_HW1": fig_canyon_flow,
     "canyon_concentration_HW1": fig_canyon_concentration,
     "grid_independence": fig_grid_independence,
     "codasc_validation": fig_codasc_validation,
+    "metric_vs_aspect_ratio": fig_aspect_ratio_sweep,
+    "les_grid_divergence": fig_les_grid_divergence,
+    "pe_sensitivity_asymmetry": fig_pe_sensitivity,
 }
 
 

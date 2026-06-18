@@ -124,9 +124,33 @@ exist** (full detail in DECISIONS.md D18):
   turbulent validation is a stated limitation; the Péclet-controlled asymmetry
   is the validation insight. Figure `figures/codasc_validation.png`.
 
-## Next — Phase 6 (production H/W sweep, idealized laminar)
-Sweep H/W ∈ {0.5, 0.66, 1.0, 1.5, 2.0, 2.5, 3.0} at the production resolution
-(48 cells/H), steady-laminar Re=25, **Péclet-matched** (advection-dominated) so
-the ventilation-vs-H/W trend reflects vortex transport. Parallelized across CPU
-cores; locate the skimming-flow transition. Clearly labelled as an idealized
-laminar exploration (not quantitative real-canyon values).
+## Phase 6 — production H/W sweep (idealized laminar exploration) ✅
+Swept H/W ∈ {0.5, 0.66, 1.0, 1.5, 2.0, 2.5, 3.0} at 48 cells/H, steady-laminar
+Re=25, BGK, Pe=50; metric is the fill-independent equilibrium retention
+(retention/flux_over_source) + the air-exchange rate ACH = flux/content. Saved via
+`io.save_result` (sidecar); scalar grid-check at H/W=1 confirmed n=48→96 = 1.1%.
+**Honest finding (trends/mechanisms only — no absolute real-canyon values):**
+- The **flow regime-change IS captured**: the cavity vortex weakens monotonically
+  with H/W (circulation −0.74 at H/W=0.5 → −0.04 at H/W=3).
+- But the **pollutant ventilation does NOT show the Oke skimming collapse**: in
+  the grid-converged laminar regime the canyon-top exchange is diffusion-
+  dominated, so retention is weak/non-monotonic (~9% range, peak near H/W=1) and
+  ACH is U-shaped (worst ventilation near H/W=1) — *not* the monotonic collapse
+  of real turbulent canyons.
+- **Why (the HEADLINE result):** the trapping/asymmetry is **advection (Péclet)
+  controlled** — `scripts/pe_sensitivity.py` shows the leeward/windward asymmetry
+  rising from ~1.0 (Pe=18, symmetric) toward the CODASC value as Pe increases.
+  At the Péclet numbers a grid-converged 2-D laminar model can reach, advection
+  is too weak to reproduce the collapse.
+- **Methods finding:** `figures/les_grid_divergence.png` documents why 2-D LES
+  cannot rescue this — the metric *diverges* on refinement (2.9× drift n=24→48),
+  vs the laminar convergence. (D18, D20.)
+
+## Future work (recorded, not built — D20)
+A grid-convergent turbulent canyon needs **steady RANS (k-ε / k-ω)**, the closure
+CODASC-validated studies use; not in this LBM codebase (major build), and 2-D
+RANS still misses 3-D along-canyon exchange. 3-D is the real next step.
+
+## Remaining: Phases 7-9
+Figure set (≥5, all regenerable via `scripts/make_figures.py`), IMRaD paper
+draft, reproducibility audit (`make reproduce`).

@@ -147,6 +147,124 @@ def plot_canyon_concentration(npz_path: str | Path, path: str | Path,
     return _save(fig, path)
 
 
+def plot_les_grid_divergence(les_csv: str | Path, laminar_csv: str | Path,
+                             path: str | Path) -> list[Path]:
+    """Methods/limitations figure: WHY 2-D LES is ill-posed for this gate.
+
+    Plots the ventilation metric vs resolution for (a) the high-Re MRT+LES runs,
+    where it DIVERGES on refinement (the Smagorinsky filter scales with cell
+    size, so refining changes the effective Re), and (b) the steady-laminar runs,
+    where it converges cleanly. Values are normalized to each series' coarsest
+    grid so the contrast is visible on one axis. A methodological result.
+    """
+    import csv as _csv
+    import numpy as np
+
+    def load(p):
+        rows = sorted(_csv.DictReader(open(p)), key=lambda r: float(r["cells_per_H"]))
+        n = np.array([float(r["cells_per_H"]) for r in rows])
+        ret = np.array([float(r["retention_mean_conc"]) for r in rows])
+        return n, ret
+
+    nL, retL = load(les_csv)          # MRT+LES (Re ~ 2000): diverges
+    nA, retA = load(laminar_csv)      # steady laminar (Re=25): converges
+
+    fig, ax = plt.subplots(figsize=(6.4, 4.4))
+    ax.axhspan(0.97, 1.03, color="C2", alpha=0.15, label="±3% gate")
+    ax.plot(nL, retL / retL[0], "s-", color="C3", ms=7,
+            label=f"MRT+LES, Re≈2000  ({retL[0]/retL[-1]:.1f}× drift, n=24→48)")
+    ax.plot(nA, retA / retA[0], "o-", color="C0", ms=7,
+            label="steady laminar, Re=25 (converged)")
+    ax.set_xscale("log", base=2); ax.set_xticks(nA)
+    ax.get_xaxis().set_major_formatter(plt.matplotlib.ticker.ScalarFormatter())
+    ax.set_xlabel("resolution (cells per building height H)")
+    ax.set_ylabel("ventilation metric / coarsest-grid value")
+    ax.set_title("Why 2-D LES is ill-posed here:\nthe metric diverges on "
+                 "refinement (LES) vs converges (laminar)", fontsize=10)
+    ax.legend(loc="center left", fontsize=8, frameon=False)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
+def plot_pe_sensitivity(csv_path: str | Path, path: str | Path) -> list[Path]:
+    """Headline insight: the leeward/windward asymmetry is advection-controlled.
+
+    Plots the wall c+ asymmetry (leeward/windward) vs Péclet number at H/W=1,
+    showing it rises from ~1 (diffusion-dominated, symmetric) toward the CODASC
+    value as advection takes over. The CODASC reference (~3.0) is marked.
+    """
+    import csv as _csv
+    import numpy as np
+
+    rows = sorted(_csv.DictReader(open(csv_path)), key=lambda r: float(r["Pe"]))
+    pe = np.array([float(r["Pe"]) for r in rows])
+    asym = np.array([float(r["asymmetry"]) for r in rows])
+
+    fig, ax = plt.subplots(figsize=(6.4, 4.4))
+    ax.axhline(2.98, color="0.4", ls="--", lw=1.2, label="CODASC (turbulent) ≈ 3.0")
+    ax.axhline(1.0, color="0.7", ls=":", lw=1, label="symmetric (no asymmetry)")
+    ax.semilogx(pe, asym, "o-", color="C3", ms=7, label="2-D laminar model (Re=25)")
+    ax.set_xlabel("Péclet number  Pe = Sc·Re  (advection / diffusion)")
+    ax.set_ylabel("leeward / windward  c⁺ asymmetry")
+    ax.set_title("Leeward–windward asymmetry is advection-controlled\n"
+                 "(it emerges as the Péclet number rises)", fontsize=10)
+    ax.legend(loc="upper left", fontsize=8, frameon=False)
+    ax.set_ylim(0.9, 3.2)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
+def plot_aspect_ratio_sweep(csv_path: str | Path, path: str | Path) -> list[Path]:
+    """Primary deliverable: ventilation metric vs aspect ratio H/W, with the
+    three Oke (1988) flow-regime bands and the skimming transition marked.
+
+    Reads results/sweep_aspect_ratio.summary.csv (retention_eq, ach vs H/W).
+    """
+    import csv as _csv
+    import numpy as np
+
+    rows = sorted((r for r in _csv.DictReader(open(csv_path))),
+                  key=lambda r: float(r["aspect_ratio"]))
+    hw = np.array([float(r["aspect_ratio"]) for r in rows])
+    ret = np.array([float(r["retention_eq"]) for r in rows])
+    ach = np.array([float(r["ach_exchange_rate"]) for r in rows])
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2), sharex=True)
+    # Oke flow-regime bands.
+    bands = [(0.0, 0.3, "isolated\nroughness", "#cde6cd"),
+             (0.3, 0.7, "wake\ninterference", "#fdf3c0"),
+             (0.7, 3.3, "skimming", "#f6cccc")]
+    for ax in (ax1, ax2):
+        for x0, x1, _lab, col in bands:
+            ax.axvspan(x0, x1, color=col, alpha=0.6, lw=0)
+        ax.axvline(0.7, color="0.4", ls="--", lw=1)
+
+    ax1.plot(hw, ret, "o-", color="C3", ms=6)
+    ax1.set_ylabel("equilibrium retention  (canyon-mean $c$)")
+    ax1.set_xlabel("aspect ratio  H/W")
+    ax1.set_title("Pollutant retention vs H/W")
+    ax2.plot(hw, ach, "o-", color="C0", ms=6)
+    ax2.set_ylabel(r"air-exchange rate  ACH  (flux/content) [1/step]")
+    ax2.set_xlabel("aspect ratio  H/W")
+    ax2.set_title("Ventilation (air-exchange) vs H/W")
+    for ax in (ax1, ax2):
+        ax.set_xlim(hw.min() - 0.1, hw.max() + 0.1)
+        ymax = ax.get_ylim()[1]
+        for x0, x1, lab, _c in bands:
+            xc = 0.5 * (max(x0, hw.min()) + min(x1, hw.max() + 0.1))
+            ax.text(xc, 0.93 * ymax, lab, ha="center", va="top", fontsize=7.5,
+                    color="0.35")
+    ax1.annotate("laminar: weak / non-monotonic —\nno skimming collapse "
+                 "(advection-suppressed)", xy=(0.5, 0.04), xycoords="axes fraction",
+                 fontsize=7.5, color="0.25", ha="left", va="bottom")
+    fig.suptitle("Ventilation vs H/W (2-D laminar, Re=25, Pe=50): the flow "
+                 "regime-change is present\nbut the pollutant skimming-collapse "
+                 "is not — it is advection-controlled (see Péclet figure)",
+                 fontsize=9.5)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
 def plot_codasc_validation(out: dict, path: str | Path) -> list[Path]:
     """Sim vs CODASC wall c+ profiles: absolute (left) and normalized shape (right).
 
