@@ -63,10 +63,21 @@ def fig_canyon_concentration() -> None:
     print(f"  canyon_concentration_HW1 -> {', '.join(p.name for p in paths)}")
 
 
+def fig_grid_independence() -> None:
+    """Plot the ventilation metric vs resolution from the grid-independence CSV."""
+    csv = ROOT / "results" / "grid_independence.csv"
+    if not csv.exists():
+        print("  grid_independence  SKIPPED (run scripts/grid_independence.py first).")
+        return
+    paths = viz.plot_grid_independence(csv, FIGDIR / "grid_independence")
+    print(f"  grid_independence -> {', '.join(p.name for p in paths)}")
+
+
 FIGURES = {
     "poiseuille_validation": fig_poiseuille_validation,
     "canyon_flow_HW1": fig_canyon_flow,
     "canyon_concentration_HW1": fig_canyon_concentration,
+    "grid_independence": fig_grid_independence,
 }
 
 

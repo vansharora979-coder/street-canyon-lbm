@@ -140,6 +140,34 @@ a deterministic laminar case). Measured GPU speedup on the RTX 4090: ~13x at
 CuPy is an **optional** dependency (`pip install -e .[accel]`); the pinned
 `requirements.txt` stays CPU-only so a no-GPU checkout still reproduces.
 
+## D18 — Phase 4 pivot: laminar (no LES), superseding the Re~1e4 ambition (D16)
+The high-Re grid-independence attempt failed for a **methodological** reason, not
+just cost. Chronology, all evidenced in the run logs:
+- **Re=1e4 (MRT+LES):** n=96 blew up (tau~0.5004, stability knife-edge); halving
+  the Mach (u_lbm 0.05->0.025) + Cs 0.16->0.22 fixed stability, but then the
+  poorly-ventilated canyon **never equilibrated** (content drifted +57% through
+  the whole averaging window at the halved exchange velocity) and carried ~13%
+  statistical uncertainty (lag-1 autocorr 0.99) vs a 3% gate.
+- **Re=2000 (MRT+LES):** stable and better-behaved, but the metric **moved 3x
+  between n=24 and n=48** (retention 1050->362). Root cause: **LES grid-
+  independence is ill-posed** -- the Smagorinsky sub-grid viscosity is
+  `nu_t=(Cs*dx)^2|S|`, so refining the grid shrinks the filter, lowers nu_t,
+  and raises the *effective* Reynolds number. Each grid simulates a different
+  flow by construction; a "does the metric stop changing" gate cannot be met.
+- **Decision (user-confirmed):** do Phase 4 -- and the production study -- in the
+  **laminar/transitional regime (Re=150, BGK, no sub-grid model)**, where the
+  flow is fully resolved (grid-refinement converges properly), steady/weakly-
+  unsteady (clean metric, negligible statistical noise), and BGK-stable
+  (tau 0.524->0.596). This is the brief's **Plan B**, triggered by physics +
+  method rather than hardware. The H/W question is still answered: the mean
+  canyon vortex and three-regime transition are ~Reynolds-independent; turbulence
+  and 3-D are stated limitations, with CODASC (Phase 5) comparing the
+  geometry-determined normalized concentration pattern.
+- D16 (MRT) and D17 (GPU backend) **remain valid infrastructure**: MRT is a
+  more-stable drop-in, and the validated CuPy backend still accelerates the
+  laminar production sweep. They are simply not used for the grid-independence
+  gate (ill-posed under LES).
+
 ## D8 — Reproducibility plumbing
 `requirements.txt` is pinned from `pip freeze` of the actually-installed
 versions (guarantees the pins resolve). Package installed editable via

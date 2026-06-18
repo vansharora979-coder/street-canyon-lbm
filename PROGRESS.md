@@ -79,9 +79,32 @@
 - **Tests:** 36 pass (added D2Q5 ADE verification, source injection, coupled
   canyon scalar, and ventilation-metric tests).
 
-## Next — Phase 4 (HARD gate, awaiting go-ahead)
-Grid-independence at H/W = 1: run the metric at increasing resolution
-(e.g. 24/48/96 cells/H) and select the production grid where the metric changes
-< ~2–3% between the two finest grids. Then Phase 5 (CODASC validation). The
-high-Re escalation (MRT + Smagorinsky LES) is implemented as part of/just before
-these gates; the sponge + time-averaging built so far carry forward.
+## Phase 4a — High-Re infrastructure ✅ (commit 3bf9552)
+- **MRT** collision (Lallemand–Luo moments; reduces to BGK exactly, conserves
+  mass+momentum — tested) and **Smagorinsky LES** eddy viscosity, in `lattice.py`.
+- **CuPy GPU backend** (`backend.py`): NumPy stays the validated reference; CuPy
+  reproduces it to round-off (rel ~1e-13). ~13x speedup at 96 cells/H on an
+  RTX 4090. Optional dep (`pip install -e .[accel]`).
+
+## Phase 4b — Grid-independence (HARD gate): regime settled
+A long diagnostic effort established **where a clean grid-independence gate can
+exist** (full detail in DECISIONS.md D18):
+- **High Re (1e4, 2000) + MRT+LES is ruled out**: n=96 blow-up at the τ→0.5
+  stability edge; the poorly-ventilated canyon never equilibrated at the low Mach
+  it needed; and — decisively — **LES grid-independence is ill-posed** (the
+  sub-grid filter ∝ cell size, so refining changes the effective Re; the metric
+  moved 3× from n=24→n=48).
+- **Transitional laminar (Re=150) is also ruled out**: the canyon **sheds above
+  ~Re 40** (≈ the Re 47 bluff-body onset; confirmed — n=96 stays unsteady at
+  Re=40/150). Coarse grids numerically damp the shedding into a *fake* steady
+  state while fine grids resolve it, so the metric **diverges** with refinement
+  (negative Richardson order).
+- **Resolution (user-confirmed): steady laminar Re=25, BGK, no LES.** Below the
+  shedding onset → steady and fully resolved at every grid → grid-converges
+  cleanly. The brief's sanctioned **Plan B** (2-D laminar proof-of-method);
+  Péclet ≈ 18 (advection-dominated, shows the H/W contrast); turbulence/high-Re/
+  3-D are stated limitations with no quantitative real-canyon claims.
+- The MRT + GPU infrastructure from 4a still accelerates the (laminar) production
+  sweep; the sponge + time-averaging carry forward.
+- **Status:** Re=25 sweep (24/48/96 cells/H) running on the GPU with per-grid
+  checkpointing; gate verdict + production resolution pending.

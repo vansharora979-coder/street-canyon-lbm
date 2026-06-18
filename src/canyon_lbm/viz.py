@@ -147,6 +147,53 @@ def plot_canyon_concentration(npz_path: str | Path, path: str | Path,
     return _save(fig, path)
 
 
+def plot_grid_independence(csv_path: str | Path, path: str | Path) -> list[Path]:
+    """Ventilation metric vs lattice resolution from grid_independence.csv.
+
+    Two panels (retention and the normalized air-exchange index) vs cells/H, with
+    a +/-3% band around the finest-grid value marking the convergence gate.
+    """
+    import csv as _csv
+
+    rows = list(_csv.DictReader(open(csv_path)))
+    n = [float(r["cells_per_H"]) for r in rows]
+    retention = [float(r["retention_mean_conc"]) for r in rows]
+    vent = [float(r["ventilation_index"]) for r in rows]
+
+    fig, axes = plt.subplots(1, 2, figsize=(9, 3.8))
+    for ax, vals, label in (
+        (axes[0], retention, "retention  (canyon-mean C)"),
+        (axes[1], vent, r"ventilation index  $w_e/U_H$"),
+    ):
+        ax.plot(n, vals, "o-", color="C0", ms=6)
+        finest = vals[-1]
+        ax.axhspan(0.97 * finest, 1.03 * finest, color="C2", alpha=0.15,
+                   label="±3% of finest")
+        ax.axhline(finest, color="C2", lw=1, ls="--")
+        ax.set_xlabel("resolution (cells per building height H)")
+        ax.set_ylabel(label)
+        ax.set_xticks(n)
+        ax.legend(loc="best", fontsize=8, frameon=False)
+    if len(n) >= 2:
+        rel = abs(vent[-1] - vent[-2]) / (abs(vent[-2]) + 1e-30) * 100
+        axes[1].set_title(f"{n[-2]:.0f}→{n[-1]:.0f} cells/H: {rel:.1f}% change")
+    # Read the actual regime (Re, collision) from the run metadata so the title
+    # never goes stale relative to the data it plots.
+    regime = ""
+    try:
+        import json
+        meta = json.load(open(
+            Path(csv_path).with_name("grid_independence.summary.json.meta.json")))
+        cfg = meta.get("config", {})
+        if cfg.get("Re") is not None:
+            regime = f", Re = {float(cfg['Re']):g}, {cfg.get('collision', '').upper()}"
+    except Exception:
+        pass
+    fig.suptitle(f"Grid-independence study (H/W = 1{regime})")
+    fig.tight_layout()
+    return _save(fig, path)
+
+
 def plot_poiseuille(result: dict, path: str | Path) -> list[Path]:
     """Numeric vs analytic Poiseuille profile with the relative error annotated."""
     y = result["y"]
