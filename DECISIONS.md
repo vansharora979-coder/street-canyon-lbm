@@ -168,6 +168,28 @@ just cost. Chronology, all evidenced in the run logs:
   laminar production sweep. They are simply not used for the grid-independence
   gate (ill-posed under LES).
 
+## D19 — Phase 5 CODASC: qualitative validation + Péclet insight (gate reframed)
+The CODASC reference (AR=1, no trees, 90°; downloaded from umweltaerodynamik.de)
+shows a strong leeward/windward asymmetry (c+ ratio ~3.0; leeward 42.6, windward
+11.8 at street level) and a gentle vertical decay (street/roof ~2.1). The
+grid-converged steady-laminar model (Re=25):
+- **captures** the vertical decay (direction right) and, with Péclet matching,
+  the leeward>windward asymmetry **direction**;
+- but **cannot match it quantitatively**: at the physical Sc=0.72 the Péclet
+  number is only Pe=Sc·Re≈18 (diffusion-dominated → near-symmetric, ratio 1.02);
+  raising Pe recovers part of the asymmetry (1.69 at Pe=200) **confirming it is a
+  Péclet/advection effect**, but the weak laminar vortex can't drive the strong
+  mixing of the turbulent tunnel (decay too steep), so the ratio stalls ~1.7.
+- FAC2≈0.79 on raw c+ "passes" 0.66 but is coincidental magnitude overlap, not
+  correct physics — reported honestly, NOT claimed as a pass.
+**Decision (user-confirmed):** the two hard gates (grid-independence ⇒ low Re;
+turbulent validation ⇒ high Re) are mutually exclusive in 2-D LBM, so adopt the
+brief's **Plan B** — a 2-D laminar **proof-of-method**. CODASC is a qualitative
+comparison; the Péclet-controlled asymmetry is a genuine result; quantitative
+turbulent validation is an explicit, stated limitation (no overclaiming). The
+production H/W sweep runs Péclet-matched (advection-dominated) and clearly
+labelled as an idealized laminar exploration.
+
 ## D8 — Reproducibility plumbing
 `requirements.txt` is pinned from `pip freeze` of the actually-installed
 versions (guarantees the pins resolve). Package installed editable via

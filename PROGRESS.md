@@ -106,5 +106,27 @@ exist** (full detail in DECISIONS.md D18):
   3-D are stated limitations with no quantitative real-canyon claims.
 - The MRT + GPU infrastructure from 4a still accelerates the (laminar) production
   sweep; the sponge + time-averaging carry forward.
-- **Status:** Re=25 sweep (24/48/96 cells/H) running on the GPU with per-grid
-  checkpointing; gate verdict + production resolution pending.
+- **PASSED:** retention 298.8/299.0/299.0 at 24/48/96 cells/H, **48→96 = 0.0%**
+  (< 3% gate). Clean clockwise single vortex at every grid; ~equilibrated
+  (flux/source ≈ 1.0). **Production resolution = 48 cells/H.** Figure
+  `figures/grid_independence.png`.
+
+## Phase 5 — CODASC validation: qualitative (gate reframed, Plan B)
+- Downloaded the CODASC reference (AR=1, no trees, 90°; KIT, via
+  umweltaerodynamik.de) to `data/validation/` (git-ignored; see its README).
+- The steady-laminar model **captures the vertical c+ decay** but, at the
+  physical Schmidt number (Pe≈18, diffusion-dominated), **misses the
+  leeward/windward asymmetry** (ratio 1.02 vs CODASC 3.0). Raising the Péclet
+  number recovers it partially (1.69 at Pe=200) — **confirming the asymmetry is
+  an advection/Péclet effect** — but the weak laminar vortex can't fully match
+  the turbulent tunnel. FAC2≈0.79 is coincidental, not a real pass (D19).
+- **Outcome (user-confirmed): 2-D laminar proof-of-method.** Quantitative
+  turbulent validation is a stated limitation; the Péclet-controlled asymmetry
+  is the validation insight. Figure `figures/codasc_validation.png`.
+
+## Next — Phase 6 (production H/W sweep, idealized laminar)
+Sweep H/W ∈ {0.5, 0.66, 1.0, 1.5, 2.0, 2.5, 3.0} at the production resolution
+(48 cells/H), steady-laminar Re=25, **Péclet-matched** (advection-dominated) so
+the ventilation-vs-H/W trend reflects vortex transport. Parallelized across CPU
+cores; locate the skimming-flow transition. Clearly labelled as an idealized
+laminar exploration (not quantitative real-canyon values).

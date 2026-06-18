@@ -147,6 +147,53 @@ def plot_canyon_concentration(npz_path: str | Path, path: str | Path,
     return _save(fig, path)
 
 
+def plot_codasc_validation(out: dict, path: str | Path) -> list[Path]:
+    """Sim vs CODASC wall c+ profiles: absolute (left) and normalized shape (right).
+
+    ``out`` is the dict written by scripts/validate_codasc.py. The laminar model
+    is not expected to match the absolute c+ (turbulent tunnel); the right panel
+    shows the PATTERN -- leeward>>windward asymmetry and vertical decay -- which
+    is the physically robust validation.
+    """
+    import numpy as np
+
+    p = out["profiles"]
+    zr = np.array(p["zH_codasc"]); leeR = np.array(p["cplus_leeward_codasc"])
+    winR = np.array(p["cplus_windward_codasc"])
+    zs = np.array(p["zH_sim"]); leeS = np.array(p["cplus_leeward_sim"])
+    winS = np.array(p["cplus_windward_sim"])
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.5, 4.2))
+
+    # (a) absolute c+ (log x: the laminar/turbulent offset is honest, structure visible)
+    ax1.semilogx(leeR, zr, "o", color="C3", label="CODASC leeward")
+    ax1.semilogx(winR, zr, "s", color="C0", label="CODASC windward")
+    ax1.semilogx(leeS, zs, "-", color="C3", lw=2, label="model leeward")
+    ax1.semilogx(winS, zs, "-", color="C0", lw=2, label="model windward")
+    ax1.set_xlabel(r"$c^+$ (absolute)"); ax1.set_ylabel("z/H (height up wall)")
+    ax1.set_title("Absolute $c^+$\n(laminar model vs turbulent tunnel)", fontsize=10)
+    ax1.legend(fontsize=7, frameon=False); ax1.set_ylim(0, 1)
+
+    # (b) normalized by each dataset's leeward street-level value -> shape/pattern
+    leeRn, winRn = leeR / leeR[0], winR / leeR[0]
+    leeSn, winSn = leeS / leeS[0], winS / leeS[0]
+    ax2.plot(leeRn, zr, "o", color="C3", label="CODASC leeward")
+    ax2.plot(winRn, zr, "s", color="C0", label="CODASC windward")
+    ax2.plot(leeSn, zs, "-", color="C3", lw=2, label="model leeward")
+    ax2.plot(winSn, zs, "-", color="C0", lw=2, label="model windward")
+    ax2.set_xlabel(r"$c^+ / c^+_{\rm leeward,street}$"); ax2.set_ylabel("z/H")
+    ax2.set_title("Normalized shape (pattern test)", fontsize=10)
+    ax2.legend(fontsize=7, frameon=False); ax2.set_ylim(0, 1)
+
+    pat = out["pattern"]
+    fig.suptitle(
+        f"CODASC validation, H/W=1 (no trees, 90°) — "
+        f"leeward/windward: model {pat['leeward_windward_ratio_sim']:.1f} "
+        f"vs CODASC {pat['leeward_windward_ratio_codasc']:.1f}", fontsize=10)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
 def plot_grid_independence(csv_path: str | Path, path: str | Path) -> list[Path]:
     """Ventilation metric vs lattice resolution from grid_independence.csv.
 

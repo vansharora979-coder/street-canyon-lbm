@@ -73,11 +73,24 @@ def fig_grid_independence() -> None:
     print(f"  grid_independence -> {', '.join(p.name for p in paths)}")
 
 
+def fig_codasc_validation() -> None:
+    """Plot the sim-vs-CODASC wall c+ comparison from the saved validation JSON."""
+    import json
+    j = ROOT / "results" / "codasc_validation.json"
+    if not j.exists():
+        print("  codasc_validation  SKIPPED (run scripts/validate_codasc.py first).")
+        return
+    paths = viz.plot_codasc_validation(json.load(open(j)),
+                                       FIGDIR / "codasc_validation")
+    print(f"  codasc_validation -> {', '.join(p.name for p in paths)}")
+
+
 FIGURES = {
     "poiseuille_validation": fig_poiseuille_validation,
     "canyon_flow_HW1": fig_canyon_flow,
     "canyon_concentration_HW1": fig_canyon_concentration,
     "grid_independence": fig_grid_independence,
+    "codasc_validation": fig_codasc_validation,
 }
 
 

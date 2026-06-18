@@ -19,6 +19,12 @@ results/*
 figures/*
 !figures/.gitkeep
 
+# CODASC reference data is KIT's; do not redistribute. It is downloaded by the
+# user (see data/validation/README.md) and stays out of git.
+data/validation/*.txt
+data/validation/*.xls
+data/validation/*.xlsx
+
 # OS / editor cruft
 .DS_Store
 ._*

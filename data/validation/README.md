@@ -1,44 +1,47 @@
 # CODASC validation data
 
-This directory holds the wind-tunnel reference data used in the Phase 5
-validation gate. The data are **not redistributed here**; obtain them directly
-from the source so the licence/attribution stays with KIT.
+The Phase 5 validation compares against the **CODASC** (Concentration Data of
+Street Canyons) wind-tunnel database — Gromke & Ruck, KIT Laboratory of
+Building- and Environmental Aerodynamics. The data are **KIT's; not redistributed
+here** (git-ignored). Download them yourself with the commands below.
 
 ## Source
-**CODASC — Concentration Data of Street Canyons**, Karlsruhe Institute of
-Technology (KIT), Laboratory of Building- and Environmental Aerodynamics.
-Web: <https://www.codasc.de>
+Canonical address: <https://www.codasc.de> — but that host currently has a TLS
+(SNI) misconfiguration, so fetch from the lab's mirror, which is where it
+redirects:
+`https://www.umweltaerodynamik.de/bilder-originale/CODA/`
 
-Underlying experiments: Gromke, C. & Ruck, B., wind-tunnel studies of traffic
-pollutant dispersion in street canyons (isolated canyon, line source at street
-level, various aspect ratios, wind directions, and tree configurations).
+## The case we validate
+Isolated street canyon, **H/W = 1**, **no trees**, **90° (perpendicular) wind**,
+street-level line source. File naming: `AR_winddir_tree_density_wall`, so the
+reference case is `1_90_0,0_000` with walls `A` and `B`.
 
-## Case we validate
-- Geometry: **isolated street canyon, H/W = 1** (street width = building height).
-- Trees: **none** (empty-canyon reference case).
-- Wind direction: **90° (perpendicular)** — the configuration a 2D model can
-  legitimately represent (the centre plane `y/L = 0` of the 3D tunnel).
-- Quantity: **normalized concentration `c+`** on the leeward and windward canyon
-  walls (vertical profiles at the canyon mid-length).
+## Download (run from the repo root)
+```bash
+base="https://www.umweltaerodynamik.de/bilder-originale/CODA/conzdata_dat"
+curl -L -A "Mozilla/5.0" -o data/validation/codasc_AR1_notrees_90deg_A.txt "$base/1_90_0,0_000_A.txt"
+curl -L -A "Mozilla/5.0" -o data/validation/codasc_AR1_notrees_90deg_B.txt "$base/1_90_0,0_000_B.txt"
+```
+(Excel versions are under `.../condata_xls/1_90_0,0_000_A.xls`.)
 
-## Normalization (confirm against the CODASC docs before use)
-The database reports a dimensionless concentration of the form
+## File format
+Tab-separated, header `"y/H" "z/H" "c+"`, 700 grid points = 100 along-canyon
+positions (`y/H` ∈ [−5, 5]) × 7 wall heights (`z/H` ∈ {0, 0.167, …, 1.0}).
+- **Wall A = leeward** (pollutant accumulates; c⁺ up to ~42 at street level).
+- **Wall B = windward** (c⁺ up to ~12).
+The 2-D model compares to the canyon **mid-length** profile (`y/H ≈ 0`).
 
-    c+ = c · U_H · H · L_src / Q
+## c⁺ normalization (from the CODASC docs)
+`c⁺ = cₘ · U_H · H / Q_l`  (= c · U_H · H · L_src / Q), with cₘ the measured
+volume concentration, U_H the velocity at building height, H the building height,
+and Q_l the line-source emission rate per unit length. c⁺ is sampled at
+**x⁺ = 1/24 ≈ 0.0417 (x/H)** in front of each wall — `validate_codasc.py` samples
+the model at the same offset.
 
-where `c` is concentration, `U_H` the reference velocity at building height,
-`H` the building height, `L_src` the line-source length, and `Q` the source
-strength. **Verify the exact definition and units in the CODASC documentation**
-and match them in `canyon_lbm.metrics` before computing FAC2/NMSE/hit rate.
-
-## How to add the data
-1. Download the empty-canyon, 90°, H/W = 1 wall-concentration dataset from
-   <https://www.codasc.de>.
-2. Save it here as `codasc_AR1_notrees_90deg.csv` with columns documented in a
-   short header (e.g. `wall, z_over_H, c_plus`).
-3. `scripts/validate_codasc.py` (Phase 5) reads the path set in
-   `configs/validation_codasc.yaml`.
-
-## Acceptance (COST 732)
-FAC2 ≥ 0.66 (primary), with NMSE and hit rate reported alongside. If the gate
-fails, debug boundary conditions / normalization — **do not tune the answer**.
+## Honest scope (Phase 5)
+The tunnel is **turbulent** (Re ≈ 3.7×10⁴); this study runs a **steady-laminar**
+model (Re = 25 — the regime where grid-independence is well-posed, Phase 4). The
+absolute c⁺ is therefore **not** expected to match. The validation target is the
+**pattern**: the leeward≫windward asymmetry and the vertical c⁺ decay, both set
+by the canyon vortex. COST 732 metrics (FAC2, NMSE, hit rate) are reported
+descriptively, not as a strict pass/fail.
