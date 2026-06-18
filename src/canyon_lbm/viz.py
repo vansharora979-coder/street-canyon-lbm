@@ -147,6 +147,54 @@ def plot_canyon_concentration(npz_path: str | Path, path: str | Path,
     return _save(fig, path)
 
 
+def plot_canyon_schematic(path: str | Path) -> list[Path]:
+    """Definition sketch: two buildings (height H), street (width W), the aspect
+    ratio H/W, the street-level line source, the roof-opening plane, the
+    approach wind, and the trapped recirculating vortex. Pure diagram."""
+    import matplotlib.patches as mpatches
+    import numpy as np
+
+    H, W, B = 1.0, 1.0, 0.8           # building height, street width, building width
+    fig, ax = plt.subplots(figsize=(7.5, 4.6))
+    grey = "0.6"
+    # ground
+    ax.add_patch(mpatches.Rectangle((-B - 0.6, -0.08), 2 * B + W + 1.2, 0.08, color="0.3"))
+    # buildings
+    ax.add_patch(mpatches.Rectangle((-B, 0), B, H, color=grey, ec="k"))
+    ax.add_patch(mpatches.Rectangle((W, 0), B, H, color=grey, ec="k"))
+    # approach wind (over the roofs)
+    for yy in (1.28, 1.45):
+        ax.annotate("", xy=(W + B, yy), xytext=(-B - 0.5, yy),
+                    arrowprops=dict(arrowstyle="-|>", color="C0", lw=2))
+    ax.text(-B - 0.5, 1.55, r"approach wind  $U_H$", color="C0", fontsize=10)
+    # roof-opening plane
+    ax.plot([0, W], [H, H], "--", color="orange", lw=1.8)
+    ax.text(W + 0.04, H, "roof-opening plane", color="orange", fontsize=8, va="center")
+    # recirculating vortex (clockwise): a circular arrow in the canyon
+    th = np.linspace(0.3 * np.pi, 1.9 * np.pi, 100)
+    cx, cy, r = W / 2, 0.52 * H, 0.27
+    ax.plot(cx + r * np.cos(th), cy + r * np.sin(th), color="C3", lw=1.8)
+    ax.annotate("", xy=(cx + r * np.cos(th[-1]) + 0.05, cy + r * np.sin(th[-1]) - 0.02),
+                xytext=(cx + r * np.cos(th[-1]), cy + r * np.sin(th[-1])),
+                arrowprops=dict(arrowstyle="-|>", color="C3", lw=2))
+    ax.text(cx, cy, "vortex", color="C3", ha="center", va="center", fontsize=9)
+    # street-level line source
+    ax.plot(np.linspace(0.1, W - 0.1, 9), np.full(9, 0.03), "s", color="green", ms=5)
+    ax.text(W / 2, -0.14, "street-level line source", color="green", ha="center", fontsize=8)
+    # dimension labels H and W
+    ax.annotate("", xy=(-B - 0.35, 0), xytext=(-B - 0.35, H),
+                arrowprops=dict(arrowstyle="<->", color="k"))
+    ax.text(-B - 0.45, H / 2, "H", ha="right", va="center", fontsize=12)
+    ax.annotate("", xy=(0, -0.32), xytext=(W, -0.32),
+                arrowprops=dict(arrowstyle="<->", color="k"))
+    ax.text(W / 2, -0.42, "W", ha="center", va="top", fontsize=12)
+    ax.text(W / 2, 1.0, "aspect ratio  H/W", ha="center", fontsize=11, style="italic")
+    ax.set_xlim(-B - 0.7, W + B + 0.1); ax.set_ylim(-0.5, 1.7)
+    ax.set_aspect("equal"); ax.axis("off")
+    ax.set_title("Idealized 2-D street canyon", fontsize=11)
+    return _save(fig, path)
+
+
 def plot_les_grid_divergence(les_csv: str | Path, laminar_csv: str | Path,
                              path: str | Path) -> list[Path]:
     """Methods/limitations figure: WHY 2-D LES is ill-posed for this gate.

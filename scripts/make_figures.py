@@ -116,7 +116,14 @@ def fig_aspect_ratio_sweep() -> None:
     print(f"  metric_vs_aspect_ratio -> {', '.join(p.name for p in paths)}")
 
 
+def fig_canyon_schematic() -> None:
+    """Definition sketch (H, W, source, opening, vortex) — no data needed."""
+    paths = viz.plot_canyon_schematic(FIGDIR / "canyon_schematic")
+    print(f"  canyon_schematic -> {', '.join(p.name for p in paths)}")
+
+
 FIGURES = {
+    "canyon_schematic": fig_canyon_schematic,
     "poiseuille_validation": fig_poiseuille_validation,
     "canyon_flow_HW1": fig_canyon_flow,
     "canyon_concentration_HW1": fig_canyon_concentration,
