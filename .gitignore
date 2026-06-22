@@ -35,6 +35,10 @@ data/validation/*.xlsx
 ._*
 *.swp
 
+# SMB/Samba delete tombstones + network-fs temp artifacts (this tree is on a share)
+.smbdelete*
+.fuse_hidden*
+
 # Claude Code local tooling/session state
 .claude/
 
@@ -45,3 +49,5 @@ HANDOFF.md
 paper/student_primer.md
 paper/ghtc_skeleton.md
 paper/nhsjs_skeleton.md
+# working bibliography with [STUDENT MUST VERIFY] flags -- not public-ready:
+paper/references.md
