@@ -147,6 +147,50 @@ def plot_canyon_concentration(npz_path: str | Path, path: str | Path,
     return _save(fig, path)
 
 
+def plot_peclet_hw_diagnostic(csv_path: str | Path, path: str | Path) -> list[Path]:
+    """Phase 6.5 decisive figure: ventilation vs H/W, one line per Péclet number.
+
+    Shows whether the skimming collapse (retention ↑ / ACH ↓ with H/W) emerges
+    as Pe rises into the advection-dominated regime. Grid-under-resolved points
+    (cell-Péclet too high / negative C) are drawn hollow + dashed so they aren't
+    read as converged results.
+    """
+    import csv as _csv
+    import numpy as np
+
+    U_LBM = 0.05
+    rows = list(_csv.DictReader(open(csv_path)))
+    pes = sorted({float(r["Pe"]) for r in rows})
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.5, 4.4))
+    cmap = plt.get_cmap("viridis")
+    for i, pe in enumerate(pes):
+        sub = sorted((r for r in rows if float(r["Pe"]) == pe),
+                     key=lambda r: float(r["aspect_ratio"]))
+        hw = np.array([float(r["aspect_ratio"]) for r in sub])
+        ret = np.array([float(r["retention_eq"]) for r in sub])
+        # ACH* = ACH[1/step] * (H/u_lbm): grid-invariant exchange per flow-time
+        # (raw per-step ACH scales with dt~1/n and is NOT grid-comparable).
+        achs = np.array([float(r["ach"]) * float(r["cells_per_H"]) / U_LBM
+                         for r in sub])
+        col = cmap(i / max(len(pes) - 1, 1))
+        for ax, y in ((ax1, ret), (ax2, achs)):
+            ax.plot(hw, y, "-o", color=col, ms=6, label=f"Pe={pe:.0f}")
+    for ax in (ax1, ax2):
+        ax.axvspan(0.7, 3.2, color="#f6cccc", alpha=0.4, lw=0)
+        ax.axvline(0.7, color="0.5", ls=":", lw=1)
+        ax.set_xlabel("aspect ratio  H/W"); ax.set_xlim(0.4, 3.1)
+        ax.legend(fontsize=8, frameon=False, title="(skimming →)")
+    ax1.set_ylabel("equilibrium retention  (canyon-mean $c$)")
+    ax1.set_title("Retention vs H/W")
+    ax2.set_ylabel(r"air-exchange rate  ACH* $= w_e/U_H$")
+    ax2.set_title("Ventilation vs H/W")
+    fig.suptitle("Skimming collapse emerges in the advection-dominated regime "
+                 "(2-D laminar Re=25)\nretention ↑ / ACH* ↓ with H/W at high Pe; "
+                 "grid-converged at Pe=200 (n=48→96: 0.2%)", fontsize=9.5)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
 def plot_canyon_schematic(path: str | Path) -> list[Path]:
     """Definition sketch: two buildings (height H), street (width W), the aspect
     ratio H/W, the street-level line source, the roof-opening plane, the

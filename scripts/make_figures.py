@@ -122,8 +122,19 @@ def fig_canyon_schematic() -> None:
     print(f"  canyon_schematic -> {', '.join(p.name for p in paths)}")
 
 
+def fig_peclet_hw_diagnostic() -> None:
+    """Phase 6.5: ventilation vs H/W, one line per Péclet number."""
+    csv = ROOT / "results" / "phase6_5_peclet.summary.csv"
+    if not csv.exists():
+        print("  peclet_hw_diagnostic  SKIPPED (run scripts/phase6_5_peclet.py first).")
+        return
+    paths = viz.plot_peclet_hw_diagnostic(csv, FIGDIR / "peclet_hw_diagnostic")
+    print(f"  peclet_hw_diagnostic -> {', '.join(p.name for p in paths)}")
+
+
 FIGURES = {
     "canyon_schematic": fig_canyon_schematic,
+    "peclet_hw_diagnostic": fig_peclet_hw_diagnostic,
     "poiseuille_validation": fig_poiseuille_validation,
     "canyon_flow_HW1": fig_canyon_flow,
     "canyon_concentration_HW1": fig_canyon_concentration,

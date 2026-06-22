@@ -220,3 +220,259 @@ versions (guarantees the pins resolve). Package installed editable via
 `pyproject.toml` (src layout). Every result is written through `io.save_result`,
 which emits a `*.meta.json` sidecar (UTC timestamp, git SHA, platform, library
 versions, config snapshot). Seeds are fixed in configs and tests.
+
+## D21 — (2026-06-18) Phase 6.5: skimming collapse reproduced at high Péclet (OUTCOME A)
+Phase 6 found *no* monotonic skimming collapse — but it swept at **Pe=50**, below
+the advection-dominated regime. Phase 6.5 tested whether the collapse appears once
+advection dominates, **staying entirely in the locked regime** (steady-laminar
+Re=25, BGK, no LES/RANS/turbulence): only the scalar diffusivity changed, via the
+Schmidt number. Exploiting the one-way scalar coupling (D13), the steady D2Q9 flow
+was solved **once per H/W** and reused across the whole Péclet ladder; only the
+cheap D2Q5 scalar re-solved. H/W ∈ {0.5, 1, 2, 3}, Pe ∈ {50, 72, 144, 200}.
+
+**Result — the collapse emerges as Pe rises.** Retention is flat/non-monotonic at
+Pe=50 (the Phase 6 finding) but rises **monotonically** with H/W at Pe≥144, and
+ACH* falls; the collapse is fully developed by Pe=200 (retention 1721→2510→3596
+for H/W=0.5→1→2, saturating ~H/W 2–3). So Phase 6's "no collapse" was a Péclet
+artifact, **not** a property of the laminar model — Phase 6.5 refines, not
+contradicts, Phase 6.
+
+**Grid check (the gate), Pe=200, H/W=1, n=24/48/96 — PASSED.** retention_eq
+0.2%, asymmetry 0.7%, retention_raw 0.3% (n=48→96); all CONVERGED, observed
+(Richardson) order p≈+5. The naive per-step ACH showed "49.9%", but that was a
+**units artifact**: ACH in [1/step] scales with the timestep (dt ∝ dx ∝ 1/n), so
+it halves on each n-doubling by construction (8.30e-6→4.16e-6 = exactly ×0.5). The
+grid-invariant **ACH\* = ACH·(H/u_lbm)** converges to **0.2%** (0.00797→0.00798).
+The figure and paper report ACH\*, not per-step ACH.
+
+**Grid-converged Péclet ceiling ≥ 200 (at 96 cells/H).** Despite Pe_cell≈2.1 at
+n=96 (and ≈4.2 at n=48), the *integral/ratio* metrics — retention and ACH\* — are
+grid-converged because under-resolution perturbs only the thin per-cell roof flux
+detail, not the bulk canyon mean. retention is grid-robust even at n=48 (within
+0.3% of n=96). The collapse is therefore a converged result, not a coarse-grid
+artifact.
+
+**VERDICT: OUTCOME A.** The skimming collapse IS reproduced and IS grid-converged,
+in the advection-dominated regime, within the locked 2-D laminar model. The
+controlling parameter is the **Péclet number** (advection vs diffusion of the
+pollutant), consistent with D19's asymmetry finding. No turbulence was reopened;
+D18/D20 stand. Figure `figures/peclet_hw_diagnostic.png`; data
+`results/phase6_5_peclet.{json,summary.csv}`.
+
+## D22 — (2026-06-19) Re=25 flow is weakly unsteady (residual acoustic mode); Phase 6.5b convergence result
+
+### Part A — The Re=25 flow is NOT steady: "steady" → "time-averaged statistically-stationary"
+
+**Discovery.** The instantaneous Re=25 canyon flow does not reach a steady state —
+the cavity circulation oscillates at a fixed period and the L2 speed-change
+plateaus at ~1e-1, never the 1e-6 a steady state would hit. Missed until now
+because every prior result used `average_from` (time-averaging), so the
+instantaneous field was never inspected. The "Re=25 < ~Re47 shedding onset →
+steady" label (D11, D18) was an untested assumption, not a measurement.
+
+**Check 1 — physical shedding vs numerical acoustic? → NUMERICAL (acoustic mode).**
+Discriminators via `scripts/diagnose_unsteadiness.py` (8 cases, results in
+`results/_diag_unsteady.log`):
+
+**(Mach sweep — decisive.)** Period ~constant in steps as u varies (5025/5038/5556
+at u=0.05/0.025/0.10), so St ∝ 1/u (0.190/0.380/0.095). Physical shedding has
+St ≈ const; acoustic modes have T ≈ const in steps → period set by the lattice
+sound speed, not by flow geometry. Verdict: **acoustic, not shedding**.
+
+**(Domain)** 16H outflow shifts St→0.114 and cuts amplitude 10× (<0.001 u) →
+domain-resonant, suppressible. Consistent with a standing acoustic wave pinned to
+the domain length.
+
+**(Sponge)** Doubling sponge length or strengthening to τ_sponge=1.9 leaves
+frequency and amplitude unchanged → the D10 sponge cannot fully damp a standing
+wave that re-enters from the interior.
+
+**(Grid)** St≈0.19 at n=24/48/96; period ∝ n → wavelength ∝ grid spacing.
+
+Amplitude: <1% of u_lbm throughout. The St≈0.19 resemblance to physical shedding
+is coincidental; calling it shedding would overclaim.
+
+**Check 2 — window-independence of the mean.** The time-averaged cavity circulation
+converges as the window grows (from BASE case, n=48, u=0.05):
+
+| window | periods | circ | Δ from prev |
+|-------:|--------:|-----:|------------:|
+| 7 500 steps | 1.5 | −0.24074 | — |
+| 14 500 | 2.9 | −0.24710 | 2.64% |
+| 21 750 | 4.3 | −0.23642 | 4.32% |
+| 29 000 | 5.8 | −0.24404 | 3.22% |
+| 36 250 | 7.2 | −0.23982 | 1.73% |
+| 43 500 | 8.7 | −0.24160 | 0.74% |
+| 50 500 | 10.0 | −0.24243 | 0.34% |
+
+**By ~10 periods (≈3.5 flow-throughs) the mean is window-independent to <0.5%.**
+Also domain-independent: −0.242 at 8H outflow vs −0.2435 at 16H.
+
+**Re-justification of Re=25 (replaces D11/D18 "steady" rationale).** The regime is
+**"time-averaged (statistically-stationary), weakly-unsteady laminar Re=25."** The
+time-averaged mean is (a) window-independent ≥10 periods, (b) domain-independent,
+(c) grid-robust in the ventilation metric (Phase 4b/6.5). Re=25's weak
+single-frequency acoustic ripple averages out cleanly; Re=150's stronger genuine
+unsteadiness diverges on refinement (D18). No physical shedding at Re=25; the
+acoustic mode is a numerical artefact that is irrelevant to the mean vortex.
+
+**Production recipe** (Phase 6.5b): BURN_FT=1.5 (discard startup transient) +
+AVG_FT=3.5 (~10 periods); subsampled accumulation every samp=ft//200 steps (~70
+samples/period); single-host-transfer at end. Validated: reproduces the diagnostic
+cavity_circ to 4 significant figures.
+
+**Correction superseding "steady" language in D11, D18, D19, D20, D21 and script
+docstrings.** The label "steady laminar Re=25" should read "time-averaged
+(statistically-stationary) laminar Re=25" throughout. No turbulence reopened; D18
+and D20 stand in all other respects.
+
+### Part B — Phase 6.5b: Pe=144 clean-resolution convergence result
+
+**Purpose.** Phase 6.5's grid check was at a single point (Pe=200, H/W=1, n=48→96)
+with all three grids sitting at Pe_cell≥2 (borderline resolved). Phase 6.5b tested
+whether the HEADLINE Pe=144 metric converges at **both** grids in the
+unambiguously-resolved regime (Pe_cell<2): n=96 (Pe_cell=1.50) and n=192
+(Pe_cell=0.75), across all four H/W values.
+
+**Results — Pe=144, n=96 vs n=192 (Pe_cell=1.50 vs 0.75):**
+
+| H/W | ret_eq n=96 | ret_eq n=192 | Δret_eq | ΔACH* | Δasym |
+|----:|------------:|-------------:|--------:|------:|------:|
+| 0.5 | 1340.8 | 1125.9 | **16.03%** | **19.09%** | 6.18% |
+| 1.0 | 1963.4 | 1964.2 | **0.04%** | **0.04%** | 5.11% |
+| 2.0 | 2309.1 | 2227.1 | **3.55%** | **3.68%** | 0.77% |
+| 3.0 | 2246.4 | 2092.9 | **6.83%** | **7.34%** | 0.05% |
+
+Worst change: **19.09%** (H/W=0.5, ACH*). All hygiene flags clean (tau_g>0.5,
+Pe_cell<2, minC≈0.000%).
+
+**VERDICT: <1% criterion FAILS for H/W∈{0.5, 2.0, 3.0}. Outcome A is NOT locked
+as "fully grid-converged at Pe=144 across all H/W."**
+
+**What holds:**
+- H/W=1.0 converges exceptionally (0.04% in ret/ACH* → the Phase 6.5 H/W=1 gate
+  was representative for that geometry).
+- The collapse *direction* is robust at both grids: monotonic rise H/W=0.5→2
+  with saturation H/W=2→3, visible at n=96 AND n=192. The qualitative finding
+  (Péclet drives the collapse) is not in doubt.
+- The n=192 curve (Pe_cell=0.75) is the best-resolved estimate of the headline
+  values: 1126 / 1964 / 2227 / 2093 for H/W=0.5/1/2/3.
+
+**Why the non-convergence at H/W=0.5 (most likely cause).** The BGK flow solver
+uses different τ_flow between grids (1.076 at n=96, 1.652 at n=192) because the
+physical Re is held fixed while the lattice viscosity scales with n. The cavity
+circulation ratio n=192/n=96 = 2.26/1.40 = 1.61 (expected ≈2.0 for pure grid
+scaling); n=192 produces a proportionally weaker vortex, changing the advection
+pattern seen by the scalar and therefore the flux balance. This flow non-equivalence
+is widest at H/W=0.5 (ratio 1.61) and narrows toward H/W=3 (ratio 1.94), which
+matches the convergence ordering.
+
+**Pe=200 follow-on (optional, runs on cached flows):**
+- H/W=1.0: Δret=0.85%, ΔACH*=0.85% (borderline)
+- H/W=2.0: Δret=4.34%, ΔACH*=4.53% (fail)
+
+**Implication for the paper narrative.** The Phase 6.5 headline result (Outcome A:
+collapse emerges as Pe↑, Pe controls the regime) is not contradicted — the pattern
+is robust. But the "grid-converged" qualifier is now limited to H/W=1. For H/W∈{0.5,
+2, 3} at Pe=144, the two resolved grids (n=96, n=192) are not yet in the asymptotic
+regime; the n=192 values are the best-available resolved estimate. No turbulence
+reopened; D18/D20/D21 stand; paper framing in `results_limitations_framing.md`
+NOT touched (per locked constraint). Data: `results/phase6_5b_peclet.{json,summary.csv}`.
+
+## D23 — (2026-06-20) Pe=144 non-convergence is in the FLOW but NOT a bounce-back-wall (BGK-τ) artifact — TRT magic-parameter test REFUTES the wall hypothesis [NO-GO]
+
+**TL;DR.** We hypothesised the H/W=0.5 Pe=144 grid non-convergence was BGK's
+τ-dependent bounce-back wall, and tested it by re-solving the flow as pure TRT with
+the magic parameter Λ=3/16 (τ-independent wall). **Result: the TRT flow is identical
+to BGK at both grids (circ ratio 1.608× vs 1.614×; worst metric Δ 19.07% vs 19.09%).
+The wall hypothesis is REFUTED.** The non-convergence is real and in the flow, but
+its cause is NOT the wall BC. Honest fallback adopted (see OUTCOME).
+
+**The non-convergence is in the FLOW, not the scalar.** The D22B Pe=144
+non-convergence (16–19% n=96→192 at H/W=0.5) occurred while the *scalar* was clean
+(Pe_cell<2, tau_g>0.5, minC≈0). The signal is in the time-averaged flow itself: the
+cavity circulation scales by only 1.61× from n=96→192 at H/W=0.5, where pure grid
+scaling demands **2.0×** (a fixed velocity field on a 2×-finer grid: per-cell
+vorticity halves, cavity-cell count quadruples → Σω doubles). The deficit narrows
+monotonically — 1.61 / 1.72 / 1.87 / 1.94 for H/W=0.5/1/2/3 — exactly matching the
+convergence ordering (worst at H/W=0.5, best at H/W=1... and note H/W=1's
+near-2.0-consistent metric convergence is partly luck of where its curve sits).
+
+**HYPOTHESIS (tested below, REFUTED): BGK's bounce-back wall location is τ-dependent.**
+In TRT language the wall position is governed by the magic parameter
+Λ = (1/s_nu − ½)(1/s_q − ½). BGK sets every rate to 1/τ, so Λ_BGK = (τ − ½)². To
+hold Re=25 fixed while n changes, τ must change (1.076 at n=96, 1.652 at n=192), so
+**Λ_BGK jumps 0.33 → 1.33** — a 4× change. The hypothesis was that the effective
+no-slip plane therefore sits at a different sub-cell location on each grid, so the
+two grids solve subtly different geometries. Plausible (a known BGK trait; Ginzburg;
+d'Humières & Ginzburg 2009) — but the test below shows it is NOT what drives this
+flow's grid-dependence.
+
+**Correction to the Phase-4b / Pe=50 "grid-converged" interpretation.** Phase 4b
+(retention 48→96 = 0.0%) and Phase 6 (Pe=50, 48→96 = 1.1%) reported the flow as
+"grid-converged." That was over-read: at low Péclet the scalar transport is
+**diffusion-dominated and largely insensitive to the detailed flow**, so the metric
+looked converged even though the underlying BGK flow was not (the same τ-dependence
+was present — it simply did not show through a diffusion-dominated metric). The flow
+non-convergence only becomes visible once advection dominates (high Pe), which is
+precisely the regime Phase 6.5/6.5b operate in. So "metric stopped moving at Pe=50"
+≠ "flow grid-converged"; it means "metric insensitive to the flow at Pe=50."
+
+**Fix (root cause): re-solve the FLOW as pure TRT with Λ = 3/16.** The magic value
+3/16 pins the bounce-back wall at the mid-link **independent of τ**, so both grids
+solve the same geometry and the flow converges. Implemented via the existing MRT
+routine (Phase 4a): all even non-conserved moments relax at s_nu = 1/τ (viscosity,
+hence Re=25, unchanged — only the odd q-rate moves), and s_q is set so Λ=3/16. NO
+LES; the laminar Re=25 regime is otherwise untouched. Verified: MRT with all rates
+= 1/τ reproduces BGK to 1e-15; magic_s_q gives Λ=0.1875 at both τ.
+`scripts/phase6_5c_mrt_test.py`.
+
+**TEST (before committing to the full re-run): H/W=0.5 (worst case), n=96 & n=192,
+Pe=144.** GO criterion: circulation ratio → ~2.0 AND retention_eq/ACH*/asymmetry
+converge to <~3%. Also confirmed the time-averaging window is ~9.9 acoustic periods
+at BOTH grids (analytically from T∝n, and measured in-run), so averaging is not a
+second confound.
+
+**OUTCOME: NO-GO (wall hypothesis REFUTED).** H/W=0.5, Pe=144, with the TRT magic
+parameter Λ=3/16 enforced on the flow at both grids:
+
+| metric | BGK n=96→192 | TRT n=96→192 |
+|---|---|---|
+| circ ratio (n192/n96) | 1.614× | **1.608×** |
+| retention_eq Δ | 16.03% | **16.01%** |
+| ACH* Δ | 19.09% | **19.07%** |
+| asymmetry Δ | 6.18% | **6.21%** |
+
+The TRT flow differs from BGK by only ~0.6% in circulation (n=192) despite a 7×
+change in Λ, and the convergence is unchanged to 2 decimals. **Pinning the wall does
+essentially nothing here** — at Re=25 the cavity circulation is set by the
+large-scale recirculation balance, not by sub-cell wall slip, so the τ-dependent
+wall was a red herring. (The averaging window was 13–17 acoustic periods at both
+grids, so that is not the confound either.) Data: `results/phase6_5c_mrt_test.json`,
+`results/_flowcache/flow_mrt_n{96,192}_ar0.5.npz`, `scripts/phase6_5c_mrt_test.py`.
+
+**What the non-convergence actually is (best current understanding).** The flow
+grid-dependence (circ ratio 1.61, not 2.0) is REAL but is NOT a wall-BC artifact.
+The remaining candidates — not yet separated — are (a) the wide-canyon (H/W=0.5)
+time-averaged vortex structure is genuinely still resolving (n=96→192 is not yet the
+asymptotic range for this geometry; the shallow W=2H cavity has more corner/secondary
+structure than the tall canyons, consistent with the deficit being worst at H/W=0.5
+and mild at H/W=3), and/or (b) residual scalar numerical diffusion that halves with
+the grid even at Pe_cell<2. A cheap follow-up that WOULD separate them: run one
+frozen flow (e.g. the n=192 mean, restricted/coarsened) through the scalar at both
+scalar resolutions — flow-fixed. Not done (user pre-committed to STOP on NO-GO).
+
+**Honest fallback (adopted).** Report the **n=192 values as the best-resolved
+estimate**, and state the residual grid-sensitivity at low H/W explicitly — now with
+the stronger, tested statement that it is **NOT** a bounce-back-wall artifact (TRT
+magic-parameter ruled that out to ~0.1%). The **directional result is robust**: the
+skimming collapse (retention rising with H/W, saturating ~H/W 2–3) holds at n=96 AND
+n=192 AND under both BGK and TRT. The Péclet-controls-the-collapse headline (D21)
+stands; only the "grid-converged to <1% at every H/W" claim is retired (it holds at
+H/W=1; elsewhere n=192 is best-resolved with a stated few-to-~16% grid band).
+
+**Consequences.** The full four-H/W MRT re-run is CANCELLED — it would reproduce BGK
+(TRT≈BGK), so it buys nothing. The MRT-collision speed/OOM optimisation is therefore
+also moot (only mattered for that re-run). No turbulence reopened; D18/D20/D21 stand;
+`results_limitations_framing.md` NOT touched (per the locked constraint — framing
+revision is the user's call once these numbers land).

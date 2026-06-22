@@ -15,9 +15,14 @@ results/*
 !results/.gitkeep
 !results/*.summary.csv
 
-# Generated figures are regenerable via `make figures`; ignore by default.
+# Generated figures are regenerable via `make figures`. Commit the PNGs (results
+# of record; render on GitHub) and the lighter SVGs; ignore everything else and
+# the one oversized vector dump (canyon_flow_HW1.svg, ~9 MB — regenerate locally).
 figures/*
 !figures/.gitkeep
+!figures/*.png
+!figures/*.svg
+figures/canyon_flow_HW1.svg
 
 # CODASC reference data is KIT's; do not redistribute. It is downloaded by the
 # user (see data/validation/README.md) and stays out of git.
@@ -32,3 +37,11 @@ data/validation/*.xlsx
 
 # Claude Code local tooling/session state
 .claude/
+
+# Internal working docs — NOT for public release. These contain a student's name,
+# personal mentoring notes, and publication/admissions strategy. Kept local; a
+# scrubbed public version must be authored deliberately before any inclusion.
+HANDOFF.md
+paper/student_primer.md
+paper/ghtc_skeleton.md
+paper/nhsjs_skeleton.md
