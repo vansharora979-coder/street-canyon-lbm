@@ -477,6 +477,6 @@ def plot_poiseuille(result: dict, path: str | Path) -> list[Path]:
         rf"$\tau$ = {result['tau']}, iters = {result['iters']}"
     )
     ax.text(
-        0.03, 0.03, txt, transform=ax.transAxes, va="bottom", ha="left", fontsize=9
+        0.05, 0.5, txt, transform=ax.transAxes, va="center", ha="left", fontsize=9
     )
     return _save(fig, path)

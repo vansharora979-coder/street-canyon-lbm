@@ -11,7 +11,7 @@ This is a **proof-of-method + mechanism** paper. We do not claim absolute real-c
 ## Results (suggested order)
 
 **R1 — Solver verification (short, establishes credibility).**
-Body-force Poiseuille reproduces the analytic parabola to relative L2 = 7.9×10⁻⁴ (Guo forcing); the D2Q5 passive-scalar solver matches analytic advection–diffusion (pure-diffusion variance growth at ~0% error, mass conserved to machine precision; exact translation under uniform advection). Establishes that flow and scalar transport are correct before any canyon claim.
+Body-force Poiseuille reproduces the analytic parabola to relative L2 = 4.45×10⁻⁴ (Guo forcing); the D2Q5 passive-scalar solver matches analytic advection–diffusion (pure-diffusion variance growth at ~0% error, mass conserved to machine precision; exact translation under uniform advection). Establishes that flow and scalar transport are correct before any canyon claim.
 
 **R2 — Grid independence (the credibility gate).**
 In the steady-laminar regime (Re = 25, BGK, no LES) the canyon ventilation metric is grid-independent: canyon-mean retention = 298.8 / 299.0 / 299.0 at 24 / 48 / 96 cells per building height (48→96 change = 0.0%, well inside the <3% gate). Production resolution = 48 cells/H. State plainly that this convergence is *achievable only in the steady regime* and forward-reference R5/Limitations for why turbulent and transitional runs do not converge.

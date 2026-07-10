@@ -13,7 +13,7 @@ For the body-force-driven Poiseuille check (and later any source/buoyancy term),
 we use Guo forcing — a source term `F_i` in collision plus the `F/2` velocity
 correction in the moments. Alternative: the simpler Shan–Chen velocity shift.
 Guo cancels the discrete lattice-force artefacts, so a constant force reproduces
-the exact parabola; measured rel. L2 error is **7.9e-4**, validating the choice.
+the exact parabola; measured rel. L2 error is **4.45e-4**, validating the choice.
 
 ## D3 — No-slip walls: halfway bounce-back via a boolean solid mask
 Second-order accurate (wall sits halfway between last fluid and first solid
