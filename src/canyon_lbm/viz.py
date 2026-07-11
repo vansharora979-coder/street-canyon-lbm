@@ -192,52 +192,122 @@ def plot_peclet_hw_diagnostic(csv_path: str | Path, path: str | Path) -> list[Pa
 
 
 def plot_canyon_schematic(path: str | Path) -> list[Path]:
-    """Definition sketch: two buildings (height H), street (width W), the aspect
-    ratio H/W, the street-level line source, the roof-opening plane, the
-    approach wind, and the trapped recirculating vortex. Pure diagram."""
+    """Definition sketch (two panels): (a) the canyon geometry -- inlet log-law
+    profile, free-slip top, roof exchange plane, canyon vortex, H, W, the
+    street-level source, and the sponge outflow zone; (b) the D2Q9 velocity
+    set used by the solver. Pure diagram; label placement only, no data."""
     import matplotlib.patches as mpatches
     import numpy as np
 
-    H, W, B = 1.0, 1.0, 0.8           # building height, street width, building width
-    fig, ax = plt.subplots(figsize=(7.5, 4.6))
-    grey = "0.6"
-    # ground
-    ax.add_patch(mpatches.Rectangle((-B - 0.6, -0.08), 2 * B + W + 1.2, 0.08, color="0.3"))
-    # buildings
-    ax.add_patch(mpatches.Rectangle((-B, 0), B, H, color=grey, ec="k"))
-    ax.add_patch(mpatches.Rectangle((W, 0), B, H, color=grey, ec="k"))
-    # approach wind (over the roofs)
-    for yy in (1.28, 1.45):
-        ax.annotate("", xy=(W + B, yy), xytext=(-B - 0.5, yy),
-                    arrowprops=dict(arrowstyle="-|>", color="C0", lw=2))
-    ax.text(-B - 0.5, 1.55, r"approach wind  $U_H$", color="C0", fontsize=10)
-    # roof-opening plane
-    ax.plot([0, W], [H, H], "--", color="orange", lw=1.8)
-    ax.text(W + 0.04, H, "roof-opening plane", color="orange", fontsize=8, va="center")
-    # recirculating vortex (clockwise): a circular arrow in the canyon
-    th = np.linspace(0.3 * np.pi, 1.9 * np.pi, 100)
-    cx, cy, r = W / 2, 0.52 * H, 0.27
-    ax.plot(cx + r * np.cos(th), cy + r * np.sin(th), color="C3", lw=1.8)
-    ax.annotate("", xy=(cx + r * np.cos(th[-1]) + 0.05, cy + r * np.sin(th[-1]) - 0.02),
-                xytext=(cx + r * np.cos(th[-1]), cy + r * np.sin(th[-1])),
-                arrowprops=dict(arrowstyle="-|>", color="C3", lw=2))
-    ax.text(cx, cy, "vortex", color="C3", ha="center", va="center", fontsize=9)
-    # street-level line source
-    ax.plot(np.linspace(0.1, W - 0.1, 9), np.full(9, 0.03), "s", color="green", ms=5)
-    ax.text(W / 2, -0.14, "street-level line source", color="green", ha="center", fontsize=8)
-    # dimension labels H and W
-    ax.annotate("", xy=(-B - 0.35, 0), xytext=(-B - 0.35, H),
-                arrowprops=dict(arrowstyle="<->", color="k"))
-    ax.text(-B - 0.45, H / 2, "H", ha="right", va="center", fontsize=12)
-    ax.annotate("", xy=(0, -0.32), xytext=(W, -0.32),
-                arrowprops=dict(arrowstyle="<->", color="k"))
-    ax.text(W / 2, -0.42, "W", ha="center", va="top", fontsize=12)
-    ax.text(W / 2, 1.0, "aspect ratio  H/W", ha="center", fontsize=11, style="italic")
-    ax.set_xlim(-B - 0.7, W + B + 0.1); ax.set_ylim(-0.5, 1.7)
-    ax.set_aspect("equal"); ax.axis("off")
-    ax.set_title("Idealized 2-D street canyon", fontsize=11)
-    return _save(fig, path)
+    H, W, B = 1.0, 1.0, 0.8  # building height, street width, building width
 
+    fig, (ax, axb) = plt.subplots(
+        1, 2, figsize=(9.5, 4.6), gridspec_kw={"width_ratios": [2.6, 1]}
+    )
+
+    # ---- Panel (a): canyon geometry -------------------------------------
+    x_left, x_right = -1.7, 3.2
+    y_bot, y_top = -0.28, 2.0
+    ground_y = 0.0
+
+    # ground (brown strip)
+    ax.add_patch(mpatches.Rectangle(
+        (x_left, ground_y - 0.12), x_right - x_left, 0.12, color="#6b4a30", zorder=1))
+
+    # sponge outflow zone (shaded band to the right of the domain)
+    sponge_x0, sponge_x1 = 2.3, x_right
+    ax.add_patch(mpatches.Rectangle(
+        (sponge_x0, ground_y - 0.12), sponge_x1 - sponge_x0, y_top - (ground_y - 0.12),
+        color="0.85", zorder=0))
+    ax.text(sponge_x0 + (sponge_x1 - sponge_x0) / 2, (y_top + ground_y) / 2 - 0.1,
+            "sponge", color="0.4", ha="center", va="center", fontsize=10, rotation=90)
+
+    # buildings
+    ax.add_patch(mpatches.Rectangle((-B, 0), B, H, color="0.6", ec="k", zorder=2))
+    ax.add_patch(mpatches.Rectangle((W, 0), B, H, color="0.6", ec="k", zorder=2))
+
+    # free-slip top boundary
+    top_y = 1.78
+    ax.plot([x_left, sponge_x1], [top_y, top_y], "--", color="k", lw=1.3, zorder=1)
+    ax.text((x_left + sponge_x1) / 2 + 0.3, top_y + 0.08, "free-slip top",
+            ha="center", va="bottom", fontsize=10)
+    # "(a)" sits in the top-left corner, well above the dashed line
+    ax.text(x_left + 0.03, y_top - 0.02, "(a)", ha="left", va="top",
+            fontsize=15, fontweight="bold")
+
+    # inlet log-law velocity profile -- kept entirely left of the building
+    # (never crosses x = -B) and capped well below "(a)" / the dashed line.
+    x0 = -1.55
+    prof_y_top = 1.35
+    amp = 0.55  # max rightward bow stays left of the building edge at -0.8
+
+    def prof(y):
+        return x0 + amp * (y / prof_y_top) ** 0.4
+
+    y_curve = np.linspace(0.02, prof_y_top, 60)
+    ax.plot(prof(y_curve), y_curve, color="C0", lw=1.6, zorder=1)
+    for y in np.linspace(0.02, prof_y_top, 7):
+        ax.annotate("", xy=(prof(y), y), xytext=(x0, y),
+                    arrowprops=dict(arrowstyle="-|>", color="C0", lw=1.4))
+    # label sits well above the curve's top and well below "(a)"
+    ax.text(x0, prof_y_top + 0.18, "inlet (log-law)", color="C0",
+            ha="left", va="bottom", fontsize=10)
+
+    # roof exchange plane
+    ax.plot([0, W], [H, H], color="darkorange", lw=2.2, zorder=2)
+    ax.text(W / 2, H + 0.07, "roof exchange plane", color="darkorange",
+            ha="center", va="bottom", fontsize=9.5)
+
+    # canyon recirculating vortex (kept clear of the W dimension below it)
+    cx, cy, r = W / 2, 0.64, 0.20
+    th = np.linspace(0.25 * np.pi, 1.9 * np.pi, 100)
+    ax.plot(cx + r * np.cos(th), cy + r * np.sin(th), color="C0", lw=1.8, zorder=2)
+    ax.annotate("", xy=(cx + r * np.cos(th[-1]) + 0.04, cy + r * np.sin(th[-1]) - 0.02),
+                xytext=(cx + r * np.cos(th[-1]), cy + r * np.sin(th[-1])),
+                arrowprops=dict(arrowstyle="-|>", color="C0", lw=1.8))
+
+    # W dimension -- its own row, clear of both the vortex above and the
+    # street-level source label below
+    w_y = 0.30
+    ax.annotate("", xy=(0.12, w_y), xytext=(W - 0.12, w_y),
+                arrowprops=dict(arrowstyle="<->", color="k", lw=1.1))
+    ax.text(W / 2, w_y + 0.05, "W", ha="center", va="bottom", fontsize=12)
+
+    # H dimension, to the right of the right building
+    h_x = W + B + 0.15
+    ax.annotate("", xy=(h_x, 0), xytext=(h_x, H),
+                arrowprops=dict(arrowstyle="<->", color="k", lw=1.1))
+    ax.text(h_x + 0.06, H / 2, "H", ha="left", va="center", fontsize=12)
+
+    # street-level source: dots stay on the brown ground; the label moves up
+    # onto the white canyon interior (readable background) in near-black text,
+    # in its own row below the W dimension
+    dots_y = 0.035
+    ax.plot(np.linspace(0.15, W - 0.15, 8), np.full(8, dots_y), "o",
+            color="firebrick", ms=5, zorder=3)
+    ax.text(W / 2, dots_y + 0.06, "street-level source", color="0.15",
+            ha="center", va="bottom", fontsize=9.5)
+
+    ax.set_xlim(x_left, x_right)
+    ax.set_ylim(y_bot, y_top)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    # ---- Panel (b): D2Q9 velocity set -------------------------------------
+    dirs = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if not (dx == 0 and dy == 0)]
+    for dx, dy in dirs:
+        axb.annotate("", xy=(dx, dy), xytext=(0, 0),
+                     arrowprops=dict(arrowstyle="-|>", color="C0", lw=1.8))
+    axb.plot(0, 0, "o", color="k", ms=9, zorder=3)
+    axb.text(0.02, 1.55, "(b)", ha="left", va="top", fontsize=15, fontweight="bold")
+    axb.text(0, -1.55, "D2Q9 lattice", ha="center", va="top", fontsize=10.5)
+    axb.set_xlim(-1.6, 1.6)
+    axb.set_ylim(-1.75, 1.75)
+    axb.set_aspect("equal")
+    axb.axis("off")
+
+    fig.subplots_adjust(wspace=0.15)
+    return _save(fig, path)
 
 def plot_les_grid_divergence(les_csv: str | Path, laminar_csv: str | Path,
                              path: str | Path) -> list[Path]:
