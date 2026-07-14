@@ -309,6 +309,93 @@ def plot_canyon_schematic(path: str | Path) -> list[Path]:
     fig.subplots_adjust(wspace=0.15)
     return _save(fig, path)
 
+def plot_flow_regimes(path: str | Path) -> list[Path]:
+    """Figure 1: Oke (1988) flow-regime schematic -- three panels (isolated
+    roughness, wake interference, skimming flow) vs aspect ratio H/W. Pure
+    diagram; no data. Bold panel subtitle and the grey H/W-range caption below
+    it are given a deliberate vertical gap so they never crowd each other."""
+    import matplotlib.patches as mpatches
+    import numpy as np
+
+    building_color = "#b7c4d9"
+    panels = [
+        dict(tag="(a)", title="Isolated roughness", caption="H/W < 0.3", mode="isolated"),
+        dict(tag="(b)", title="Wake interference", caption="0.3 < H/W < 0.7", mode="wake"),
+        dict(tag="(c)", title="Skimming flow", caption="H/W > 0.7", mode="skim"),
+    ]
+
+    fig, axes = plt.subplots(1, 3, figsize=(11, 3.6), sharey=True)
+
+    H, B, W = 1.0, 0.55, 0.55
+    ground_y = 0.0
+    x_left, x_right = -B - 0.35, W + B + 0.35
+    y_bot, y_top = -0.55, 1.75
+
+    for ax, p in zip(axes, panels):
+        # ground
+        ax.add_patch(mpatches.Rectangle(
+            (x_left, ground_y - 0.08), x_right - x_left, 0.08, color="#6b4a30", zorder=1))
+        # buildings
+        ax.add_patch(mpatches.Rectangle((-B, 0), B, H, color=building_color, ec="k", zorder=2))
+        ax.add_patch(mpatches.Rectangle((W, 0), B, H, color=building_color, ec="k", zorder=2))
+
+        # approach-flow arrow markers along the top
+        for xa in np.linspace(x_left + 0.15, x_right - 0.15, 5):
+            ax.plot(xa, H + 0.3, ">", color="C0", ms=9, zorder=3)
+
+        if p["mode"] == "isolated":
+            # two arrows plunging straight into the (wide-open) canyon
+            for xa in (W / 2 - 0.18, W / 2 + 0.18):
+                ax.annotate("", xy=(xa, 0.15), xytext=(xa, H + 0.08),
+                            arrowprops=dict(arrowstyle="-|>", color="C0", lw=1.8))
+            # H dimension on the left building
+            hx = -B - 0.12
+            ax.annotate("", xy=(hx, 0), xytext=(hx, H),
+                        arrowprops=dict(arrowstyle="<->", color="k", lw=1.1))
+            ax.text(hx - 0.06, H / 2, "H", ha="right", va="center", fontsize=11)
+            # W dimension between the buildings
+            wy = 0.34
+            ax.annotate("", xy=(0.05, wy), xytext=(W - 0.05, wy),
+                        arrowprops=dict(arrowstyle="<->", color="C0", lw=1.4))
+            ax.text(W / 2, wy + 0.09, "W", ha="center", va="bottom", color="C0", fontsize=11)
+        elif p["mode"] == "wake":
+            cx, cy, r = W / 2, 0.5, 0.28
+            th = np.linspace(0.15 * np.pi, 1.85 * np.pi, 100)
+            ax.plot(cx + r * np.cos(th), cy + r * np.sin(th), color="C0", lw=2.2, zorder=3)
+            ax.annotate("", xy=(cx + r * np.cos(th[0]) - 0.03, cy + r * np.sin(th[0])),
+                        xytext=(cx + r * np.cos(th[0]), cy + r * np.sin(th[0])),
+                        arrowprops=dict(arrowstyle="-|>", color="C0", lw=2.2))
+        else:  # skimming
+            cx, cy, r = W / 2, 0.48, 0.18
+            th = np.linspace(0.15 * np.pi, 1.85 * np.pi, 100)
+            ax.plot(cx + r * np.cos(th), cy + r * np.sin(th), color="C0", lw=2.2, zorder=3)
+            ax.annotate("", xy=(cx + r * np.cos(th[0]) - 0.03, cy + r * np.sin(th[0])),
+                        xytext=(cx + r * np.cos(th[0]), cy + r * np.sin(th[0])),
+                        arrowprops=dict(arrowstyle="-|>", color="C0", lw=2.2))
+            # short roof-level feed arrow above the vortex
+            ax.annotate("", xy=(cx + 0.15, H + 0.08), xytext=(cx - 0.1, H + 0.08),
+                        arrowprops=dict(arrowstyle="-|>", color="C0", lw=1.8))
+
+        ax.text(x_left + 0.04, y_top - 0.02, p["tag"], ha="left", va="top",
+                fontsize=14, fontweight="bold")
+
+        # Bold title and the grey H/W-range caption below it -- deliberately
+        # spaced apart (0.30 data units) so they never crowd each other.
+        title_y = -0.30
+        caption_y = -0.30 - 0.20
+        ax.text((x_left + x_right) / 2, title_y, p["title"], ha="center", va="top",
+                fontsize=13, fontweight="bold")
+        ax.text((x_left + x_right) / 2, caption_y, p["caption"], ha="center", va="top",
+                fontsize=10.5, color="0.5")
+
+        ax.set_xlim(x_left, x_right)
+        ax.set_ylim(y_bot, y_top)
+        ax.set_aspect("equal")
+        ax.axis("off")
+
+    fig.subplots_adjust(wspace=0.05, bottom=0.02)
+    return _save(fig, path)
+
 def plot_les_grid_divergence(les_csv: str | Path, laminar_csv: str | Path,
                              path: str | Path) -> list[Path]:
     """Methods/limitations figure: WHY 2-D LES is ill-posed for this gate.

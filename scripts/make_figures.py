@@ -122,6 +122,12 @@ def fig_canyon_schematic() -> None:
     print(f"  canyon_schematic -> {', '.join(p.name for p in paths)}")
 
 
+def fig_flow_regimes() -> None:
+    """Figure 1: Oke flow-regime schematic (isolated / wake / skimming) -- no data needed."""
+    paths = viz.plot_flow_regimes(FIGDIR / "flow_regimes")
+    print(f"  flow_regimes -> {', '.join(p.name for p in paths)}")
+
+
 def fig_peclet_hw_diagnostic() -> None:
     """Phase 6.5: ventilation vs H/W, one line per Péclet number."""
     csv = ROOT / "results" / "phase6_5_peclet.summary.csv"
@@ -134,6 +140,7 @@ def fig_peclet_hw_diagnostic() -> None:
 
 FIGURES = {
     "canyon_schematic": fig_canyon_schematic,
+    "flow_regimes": fig_flow_regimes,
     "peclet_hw_diagnostic": fig_peclet_hw_diagnostic,
     "poiseuille_validation": fig_poiseuille_validation,
     "canyon_flow_HW1": fig_canyon_flow,
