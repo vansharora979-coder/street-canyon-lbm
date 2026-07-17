@@ -112,38 +112,6 @@ PROGRESS.md       phase-by-phase running log
   `paper/results_limitations_framing.md` hold the Results/Limitations scaffold. The
   final draft lands in Phase 8.
 
-## Status
-
-Phase-gated; **grid-independence (Phase 4)** and **CODASC validation (Phase 5)** are
-hard gates that gate any production sweep.
-
-| Phase | Description | Status |
-|------:|-------------|--------|
-| 0 | Bootstrap / scaffold | ✅ |
-| 1 | D2Q9 BGK core + Poiseuille validation | ✅ |
-| 2 | Canyon geometry + boundary conditions | ✅ |
-| 3 | Passive-scalar pollutant + ventilation metric | ✅ |
-| 4 | Grid-independence gate (laminar Re = 25) | ✅ |
-| 5 | CODASC validation (qualitative) | ✅ |
-| 6 | Production aspect-ratio sweep | ✅ |
-| 6.5 | High-Péclet `H/W` diagnostic — Péclet control confirmed | ✅ |
-| 7 | Figure set | ✅ |
-| 8 | IMRaD paper draft | ⏳ in preparation |
-| 9 | Reproducibility audit | ⏳ in progress |
-
-## How to cite
-
-A manuscript describing this work is in preparation (working title: *Quantifying
-Street-Canyon Ventilation: A 2-D Lattice-Boltzmann Study of How Aspect Ratio and the
-Péclet Number Govern Pollutant Trapping*; target: NHSJS). Until it appears, please
-cite the repository — the formal paper citation will be added here on acceptance:
-
-```
-<Author(s)>. Quantifying Street-Canyon Ventilation: A 2-D Lattice-Boltzmann Study of
-How Aspect Ratio and the Péclet Number Govern Pollutant Trapping. GitHub repository,
-2026. <repository URL>
-```
-
 ## License
 
 MIT — see `LICENSE`.
