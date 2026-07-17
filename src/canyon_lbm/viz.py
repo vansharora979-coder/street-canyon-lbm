@@ -268,10 +268,11 @@ def plot_canyon_schematic(path: str | Path) -> list[Path]:
 
     # W dimension -- its own row, clear of both the vortex above and the
     # street-level source label below
-    w_y = 0.30
+    w_y = 0.33
     ax.annotate("", xy=(0.12, w_y), xytext=(W - 0.12, w_y),
                 arrowprops=dict(arrowstyle="<->", color="k", lw=1.1))
-    ax.text(W / 2, w_y + 0.05, "W", ha="center", va="bottom", fontsize=12)
+    ax.text(W / 2, w_y, "W", ha="center", va="center", fontsize=12,
+            bbox=dict(fc="white", ec="none", pad=1.5), zorder=4)
 
     # H dimension, to the right of the right building
     h_x = W + B + 0.15
@@ -285,8 +286,8 @@ def plot_canyon_schematic(path: str | Path) -> list[Path]:
     dots_y = 0.035
     ax.plot(np.linspace(0.15, W - 0.15, 8), np.full(8, dots_y), "o",
             color="firebrick", ms=5, zorder=3)
-    ax.text(W / 2, dots_y + 0.06, "street-level source", color="0.15",
-            ha="center", va="bottom", fontsize=9.5)
+    ax.text(W / 2, -0.062, "street-level source", color="white",
+            ha="center", va="center", fontsize=9.5, zorder=4)
 
     ax.set_xlim(x_left, x_right)
     ax.set_ylim(y_bot, y_top)
@@ -359,7 +360,7 @@ def plot_flow_regimes(path: str | Path) -> list[Path]:
                         arrowprops=dict(arrowstyle="<->", color="C0", lw=1.4))
             ax.text(W / 2, wy + 0.09, "W", ha="center", va="bottom", color="C0", fontsize=11)
         elif p["mode"] == "wake":
-            cx, cy, r = W / 2, 0.5, 0.28
+            cx, cy, r = W / 2, 0.5, 0.22
             th = np.linspace(0.15 * np.pi, 1.85 * np.pi, 100)
             ax.plot(cx + r * np.cos(th), cy + r * np.sin(th), color="C0", lw=2.2, zorder=3)
             ax.annotate("", xy=(cx + r * np.cos(th[0]) - 0.03, cy + r * np.sin(th[0])),
